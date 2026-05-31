@@ -9,7 +9,7 @@ Rendered design work needs durable evidence. A build passing is not enough.
 - `.design-director/design-qa.md`
 - `.design-director/screenshots/` manifest
 
-The brief may be omitted only for a short route-only answer.
+The brief may be omitted only for a short routing answer.
 
 ## Default Viewports
 
@@ -43,6 +43,7 @@ Use fewer only when the surface clearly does not need them, and record why.
 - Motion performance check when animation exists: no obvious scroll jank, layout thrash, flashing, text blur, or repeated long tasks from animation loops.
 - Screenshot inspection notes.
 - Focused-state screenshots for any component or section with recent user complaints, dense generated labels, popovers, overlays, charts, counters, markers, or small repeated controls. Full-page screenshots alone are not sufficient for those areas.
+- State discovery output or a recorded waiver. For rendered web targets, run `scripts/discover-states.mjs` before final QA unless the page is static or the user explicitly limited scope.
 - Visual consistency audit for repeated components: peer typography, slot alignment, local spacing rhythm, media/title anchoring, attached-control width, and affordance clarity.
 - Overlay stacking audit for open dropdown/listbox/popover states: sampled points inside the overlay must resolve to the overlay or its descendants with `elementFromPoint`, and the overlay must not be clipped by the viewport.
 - Interaction tool evidence: use the Browser plugin for local web targets, Chrome plugin for deployed/authenticated/profile-dependent pages or explicit Chrome requests, and Computer Use only when browser tools cannot exercise the surface. Record the tool and active states used in screenshot notes or QA notes.
@@ -70,6 +71,7 @@ Use fewer only when the surface clearly does not need them, and record why.
 - Repeated grid/card columns or attached details/actions drift out of alignment without an explicit hierarchy reason.
 - A non-disabled interactive control blends into its surrounding surface so strongly that its affordance depends on hover, focus, or prior knowledge.
 - Screenshots generated but not inspected.
+- Rendered interactive states were not discovered, configured, inspected, or explicitly waived.
 - User-complained component inspected only in full-page context when a focused crop/state was needed.
 
 ## Acceptance Contract
@@ -80,9 +82,10 @@ A design pass is accepted only when:
 2. The brief names source of truth, surface, owners, anti-goals, and acceptance gates.
 3. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
 4. Implementation changes map back to the brief.
-5. Rendered screenshots exist for required viewports and key states.
-6. Screenshots were inspected, not merely generated.
-7. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
-8. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
-9. No blocker remains unwaived.
-10. Any waiver includes evidence and reason.
+5. `scripts/discover-states.mjs` was run or explicitly waived with a reason when a rendered web surface exists.
+6. Rendered screenshots exist for required viewports and key states.
+7. Screenshots were inspected, not merely generated.
+8. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
+9. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
+10. No blocker remains unwaived.
+11. Any waiver includes evidence and reason.

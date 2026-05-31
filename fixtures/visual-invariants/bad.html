@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Visual Invariants Bad Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #eef3ef;
+        color: #15221d;
+      }
+      main {
+        max-width: 880px;
+        margin: 40px auto;
+        padding: 24px;
+      }
+      .toolbar {
+        position: relative;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        background: #eef3ef;
+        padding: 16px;
+        border: 1px solid #d1ddd5;
+      }
+      select {
+        background: #eef3ef;
+        border: 1px solid #edf3ef;
+        color: #15221d;
+        font-size: 18px;
+        padding: 12px 40px 12px 16px;
+      }
+      select:focus {
+        outline: 4px solid red;
+      }
+      .filter-button {
+        border: 1px solid #b8c9bf;
+        background: white;
+        padding: 12px 16px;
+      }
+      .dropdown-options {
+        position: absolute;
+        top: 64px;
+        left: 170px;
+        width: 260px;
+        min-height: 160px;
+        z-index: 1;
+        background: white;
+        border: 2px solid #8aa395;
+        box-shadow: 0 8px 20px rgb(0 0 0 / 14%);
+      }
+      .chart-panel {
+        position: relative;
+        z-index: 2;
+        margin-top: 8px;
+        height: 180px;
+        background: #dce8e1;
+        border: 1px solid #9bb3a6;
+      }
+      .chart-panel svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .metric-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-top: 24px;
+        border: 1px solid #c6d3cb;
+      }
+      .metric {
+        padding: 18px;
+        border-right: 1px solid #c6d3cb;
+      }
+      .metric:nth-child(2n) {
+        border-right: 0;
+      }
+      .metric-label {
+        display: block;
+        font-size: 14px;
+        text-transform: uppercase;
+      }
+      .metric-value {
+        display: block;
+        margin-top: 8px;
+        font-size: 28px;
+        font-weight: 700;
+      }
+      .metric:nth-child(2) .metric-value {
+        font-size: 18px;
+        font-weight: 400;
+      }
+      .details {
+        width: calc(100% + 48px);
+        margin-top: 8px;
+        padding: 16px;
+        border: 1px solid #c6d3cb;
+        background: #f8fbf9;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="toolbar">
+        <label for="sortSelect">Sort</label>
+        <select id="sortSelect">
+          <option>Newest</option>
+          <option>Highest rated</option>
+        </select>
+        <button id="filtersButton" class="filter-button" aria-expanded="false" aria-controls="filterMenu">Filters</button>
+        <div id="filterMenu" class="dropdown-options" role="listbox">
+          <div role="option">Open option A</div>
+          <div role="option">Open option B</div>
+        </div>
+      </section>
+      <section class="chart-panel" aria-label="Sample chart">
+        <svg viewBox="0 0 400 180" role="img" aria-label="Sample bar chart">
+          <rect x="20" y="80" width="60" height="80" fill="#2d6a4f"></rect>
+          <rect x="120" y="40" width="60" height="120" fill="#1b4965"></rect>
+          <rect x="220" y="100" width="60" height="60" fill="#99582a"></rect>
+        </svg>
+      </section>
+      <section class="metric-grid">
+        <div class="metric">
+          <span class="metric-label">Score</span>
+          <span class="metric-value">98</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Complexity</span>
+          <span class="metric-value">3.2</span>
+        </div>
+      </section>
+      <button class="details">More details</button>
+    </main>
+  </body>
+</html>

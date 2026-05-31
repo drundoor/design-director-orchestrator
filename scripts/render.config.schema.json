@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/design-director/render.config.schema.json",
+  "title": "Design Director Render Config",
+  "type": "object",
+  "required": ["url"],
+  "additionalProperties": true,
+  "properties": {
+    "url": { "type": "string" },
+    "waitForSelector": { "type": "string" },
+    "waitMs": { "type": "number", "minimum": 0 },
+    "fullPage": { "type": "boolean" },
+    "viewports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["width", "height"],
+        "properties": {
+          "width": { "type": "number", "minimum": 1 },
+          "height": { "type": "number", "minimum": 1 }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "url": { "type": "string" },
+          "waitForSelector": { "type": "string" },
+          "waitMs": { "type": "number", "minimum": 0 },
+          "actions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/action" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "action": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "enum": [
+            "click",
+            "fill",
+            "type",
+            "focus",
+            "blur",
+            "hover",
+            "press",
+            "keyboardShortcut",
+            "select",
+            "check",
+            "uncheck",
+            "wait",
+            "waitForSelector",
+            "waitForNetworkIdle",
+            "waitForStableLayout",
+            "scrollIntoView",
+            "scrollBy",
+            "scrollTo",
+            "wheel",
+            "drag",
+            "resizeViewport",
+            "setViewport",
+            "setLocalStorage",
+            "setSessionStorage",
+            "clearStorage",
+            "assertVisible",
+            "assertHidden",
+            "assertText",
+            "assertNoHorizontalOverflow",
+            "screenshotElement",
+            "scrollBoundaryCheck"
+          ]
+        },
+        "selector": { "type": "string" },
+        "value": {},
+        "key": { "type": "string" },
+        "ms": { "type": "number", "minimum": 0 },
+        "waitMs": { "type": "number", "minimum": 0 },
+        "timeout": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

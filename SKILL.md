@@ -28,10 +28,7 @@ Exit and use a specialist directly when:
 
 ## Protocol
 
-1. Decide mode:
-   - `route-only`
-   - `implement-and-verify`
-   - `qa-only`
+1. Classify intent and platform/surface. See `references/modes.md`.
 2. Read local truth before outside references. See `references/intake.md`.
 3. Classify source of truth in priority order:
    1. Accessibility, keyboard, touch, reduced motion, legal/safety constraints.
@@ -41,10 +38,14 @@ Exit and use a specialist directly when:
    5. User complaints and anti-goals.
    6. External references.
 4. Classify surface and specialist owner. See `references/routing.md`.
-5. Produce or update `.design-director/design-brief.md` unless the user requested a quick route-only answer.
-6. Use at most three external references, only after the brief exists. See `references/reference-tiers.md`.
+5. Produce or update `.design-director/design-brief.md` unless the user requested a quick routing answer.
+6. Choose reference depth, only after the brief exists. See `references/reference-tiers.md`.
 7. Assign exactly one owner for direction, implementation, and validation. See `references/handoff-conflicts.md`.
 8. After visual implementation, rendered QA is mandatory. See `references/validation-contract.md`.
+
+## Token Discipline
+
+Load only the references needed for the current intent and platform. Do not read every reference file by default. For quick routing, stop after `modes`, `intake`, and `routing` unless the answer needs validation or platform detail.
 
 ## Interactive QA Rule
 
@@ -55,10 +56,16 @@ Rendered QA must exercise the interface the way a user will use it. Static defau
 - Use Computer Use only as a last resort for desktop-only interactions that Browser or Chrome cannot reach.
 - Before acceptance, configure and inspect active states for every relevant interactive surface: search suggestions, dropdowns, comboboxes, filter pickers, popovers, dialogs, menus, details/accordions, tabs, chart controls, hover/focus states, mobile navigation, and form validation.
 - Open overlays and menus in both mobile and desktop viewports when they exist. Verify they are visible, usable, above neighboring containers/charts/tables, not clipped, and reachable by keyboard/touch as applicable.
+- Run state discovery or explicitly waive it before final QA when a rendered web surface exists. A manually named default state is not enough for interfaces with controls, overlays, charts, forms, tabs, filters, or nested scroll.
 
-For strategy guides, manuals, catalogs, rule/reference guides, technical references, and dense dashboards, read `references/dense-reference-apps.md`.
+Load focused references only when relevant:
 
-For animation, motion design, scroll-driven effects, or timeline-heavy interaction, read `references/animation-motion.md`.
+- Dense apps/manuals/catalogs: `references/dense-reference-apps.md`.
+- Motion/animation: `references/animation-motion.md`.
+- Dashboards/charts/maps/reports: `references/data-viz-contract.md`.
+- Games/canvas/WebGL: `references/game-canvas-contract.md`.
+- Native iOS: `references/platforms-ios.md`.
+- Native Android: `references/platforms-android.md`.
 
 ## Reference Rule
 
@@ -81,22 +88,17 @@ Do not call design work accepted if any relevant blocker remains unwaived:
 
 - Console error or framework overlay.
 - Mobile horizontal page overflow.
-- Clipped or unintentionally wrapped controls.
-- Essential text below the project threshold.
-- Hover-only content with no keyboard/touch path.
-- Inaccessible focus path or hidden focus state.
-- Board/map hotspot unusable or popover offscreen.
-- Board/map markers, pins, posts, labels, or callouts are hidden under hotspots, sticky UI, or later overlay layers.
-- Dropdowns, autocomplete lists, popovers, dialogs, picker menus, or chart controls are clipped, offscreen, hidden behind later containers/charts/tables/sticky UI, or fail when opened in their intended active state.
+- Essential text/control is clipped, tiny, low-contrast, hidden, or inaccessible.
+- Hover-only or mouse-only essential content.
+- Open overlays, menus, popovers, chart controls, or mobile navigation are clipped, offscreen, or behind other UI.
+- Board/map/canvas/chart semantics are visually covered, unclickable, or contradicted by the data.
 - Chart/data display contradicts source data.
-- Required caveat/label absent from screenshot.
-- Low-contrast text on badges, rows, overlays, cards, or dense panels. Do not accept white/light text on pale neutral fills.
-- Banned visual trope appears in core UI.
-- Screenshots generated but not inspected.
-- A recently complained-about component was not inspected in a focused crop or active state when full-page screenshots could hide the defect.
-- Peer values, labels, or repeated slots inside the same card/panel/table row use inconsistent typography without a named hierarchy reason.
-- Repeated component columns, media/title groups, or attached controls visibly drift out of alignment without a named layout reason.
+- Required caveat/source label is absent.
+- Screenshots, active states, or state discovery were generated/skipped without inspection notes or waiver.
+- Repeated same-role values, labels, slots, columns, media/title groups, or attached controls visibly drift without a named hierarchy reason.
 - An interactive control is visually camouflaged against its surrounding surface.
+
+Use `references/validation-contract.md` and `references/severity-policy.md` for the full acceptance contract.
 
 ## Scripts
 
@@ -105,6 +107,7 @@ Use scripts only when there is a real rendered target:
 - `scripts/render-check.mjs`: captures screenshots and console/page errors, including configured active states.
 - `scripts/dom-audit.mjs`: collects overflow, text, tap target, focus, and hover-only candidates after configured active-state actions.
 - `scripts/visual-consistency-audit.mjs`: collects peer typography, spacing, alignment, media-card anchoring, related-width, camouflaged-control, and overlay stacking candidates after configured active-state actions.
+- `scripts/discover-states.mjs`: scans a rendered page and emits a draft active-state config with confidence and mutation-risk labels.
 - `scripts/qa-report.mjs`: merges evidence into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
 
 These scripts are evidence collectors. They do not replace judgment or specialist skills.

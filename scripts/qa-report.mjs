@@ -13,6 +13,8 @@ function parseArgs(argv) {
       args.out = argv[++i];
     } else if (arg === "--notes") {
       args.notes = argv[++i];
+    } else if (arg === "--init-notes") {
+      args.initNotes = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -21,10 +23,11 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md]
+  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--init-notes]
 
 Merges render-results.json, dom-audit.json, and visual-consistency-audit.json
-into design-qa.json and design-qa.md.`;
+into design-qa.json and design-qa.md. Use --init-notes to create a screenshot
+inspection template from render-results.json before writing the report.`;
 }
 
 async function readJson(file, fallback = null) {
@@ -51,6 +54,48 @@ function bullet(items) {
   return items.map((item) => `- ${item}`).join("\n");
 }
 
+async function pathExists(file) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function screenshotNoteTemplate(render) {
+  const screenshots = render.screenshots || [];
+  const rows = screenshots.length
+    ? screenshots.map((screenshot) => {
+        const state = (render.states || []).find((entry) => entry.screenshot === screenshot);
+        const viewport = state?.viewport ? `${state.viewport.width}x${state.viewport.height}` : "unknown";
+        return `## ${screenshot}
+
+- Viewport: ${viewport}
+- State: ${state?.state || "unknown"}
+- URL: ${state?.finalUrl || state?.url || "unknown"}
+- Observation: TODO
+- Pass/fail: TODO
+- Issues found: TODO
+- Waiver/evidence: TODO
+`;
+      }).join("\n")
+    : "No screenshots found in render-results.json.\n";
+  return `# Screenshot Inspection Notes
+
+Replace every TODO with a real observation. A generated template does not count
+as inspection.
+
+${rows}`;
+}
+
+function notesLookInspected(notes) {
+  const text = notes.trim();
+  if (!text) return false;
+  if (/\bTODO\b|generated template does not count/i.test(text)) return false;
+  return /pass|fail|observed|checked|verified|issue|waiv/i.test(text);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -63,7 +108,11 @@ async function main() {
   const render = await readJson(path.join(outDir, "render-results.json"), { states: [], screenshots: [] });
   const dom = await readJson(path.join(outDir, "dom-audit.json"), { states: [] });
   const visual = await readJson(path.join(outDir, "visual-consistency-audit.json"), { states: [] });
+  const discovery = await readJson(path.join(outDir, "discovered-states.json"), null);
   const notesPath = args.notes || path.join(outDir, "screenshot-notes.md");
+  if (args.initNotes && (render.screenshots || []).length && !(await pathExists(notesPath))) {
+    await fs.writeFile(notesPath, screenshotNoteTemplate(render));
+  }
   const notes = await readText(notesPath, "");
 
   const blockers = [];
@@ -95,8 +144,11 @@ async function main() {
     if (state.audit?.warnings?.length) warnings.push(`${label}: ${state.audit.warnings.length} visual consistency warning candidate(s)`);
   }
 
-  if ((render.screenshots || []).length && !notes.trim()) {
+  if ((render.screenshots || []).length && !notesLookInspected(notes)) {
     blockers.push("screenshots were generated but no screenshot inspection notes were found");
+  }
+  if ((render.screenshots || []).length && !discovery) {
+    blockers.push("state discovery output was not found; run discover-states.mjs or record a waiver");
   }
 
   const qa = {
@@ -105,6 +157,7 @@ async function main() {
     warnings,
     screenshotCount: (render.screenshots || []).length,
     screenshotNotesPath: notes.trim() ? notesPath : null,
+    stateDiscoveryPath: discovery ? path.join(outDir, "discovered-states.json") : null,
     renderResultsPath: path.join(outDir, "render-results.json"),
     domAuditPath: path.join(outDir, "dom-audit.json"),
     visualConsistencyAuditPath: path.join(outDir, "visual-consistency-audit.json"),
@@ -120,6 +173,7 @@ Generated: ${qa.generatedAt}
 - Warnings: ${warnings.length}
 - Screenshots: ${qa.screenshotCount}
 - Screenshot notes: ${qa.screenshotNotesPath || "missing"}
+- State discovery: ${qa.stateDiscoveryPath || "missing"}
 
 ## Blockers
 
@@ -142,6 +196,7 @@ ${notes.trim() || "_Missing. Add inspected screenshot notes or waive this blocke
 - Render results: ${qa.renderResultsPath}
 - DOM audit: ${qa.domAuditPath}
 - Visual consistency audit: ${qa.visualConsistencyAuditPath}
+${qa.stateDiscoveryPath ? `- State discovery: ${qa.stateDiscoveryPath}` : "- State discovery: missing"}
 `;
 
   await fs.writeFile(path.join(outDir, "design-qa.json"), `${JSON.stringify(qa, null, 2)}\n`);

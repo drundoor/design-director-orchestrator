@@ -1,4 +1,4 @@
 interface:
   display_name: "Design Director"
-  short_description: "Route multi-skill design work"
-  default_prompt: "Use $design-director to route this UI work, define the design brief, choose references, and set the QA gates."
+  short_description: "Orchestrate UI design, references, and QA"
+  default_prompt: "Use $design-director to classify the design intent/platform, define the brief, choose references, discover active states, and set the QA gates."

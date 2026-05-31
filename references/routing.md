@@ -15,14 +15,18 @@ Run `design-director` only for multi-skill, high-risk, or validation-heavy desig
 
 | Surface | Direction Owner | Implementation Owner | Validation Owner |
 |---|---|---|---|
-| Product UI | `interface-design` or `impeccable` | Codex/frontend code | rendered QA |
+| Web product UI | `interface-design` or `impeccable` | Codex/frontend code | rendered QA plus state discovery |
 | Dense reference app | `impeccable layout/typeset/clarify` plus this brief | Codex/frontend code | rendered QA plus DOM audit |
-| Dashboard/data visualization | `data-visualization` | Codex/frontend code | viz correctness plus screenshots |
+| Dashboard/data visualization | `data-visualization` plus `references/data-viz-contract.md` | Codex/frontend code | viz correctness plus screenshots plus active chart states |
 | Board/map/diagram | `data-visualization` plus domain brief | Codex/frontend code | hotspot/label/popover QA |
 | Component behavior | WAI APG, React Aria, Radix, then `impeccable harden/craft` | Codex/frontend code | keyboard/focus/touch checks |
 | Marketing/editorial | `hallmark` or `frontend-app-builder` | Codex/frontend code | screenshots plus anti-slop review |
 | Iconography | local icon system first, then `better-icons` | Codex | metaphor/readability check |
 | Animation/motion | local brief plus `references/animation-motion.md`; GSAP docs/repo when timelines or scroll choreography are needed | Codex/frontend code | reduced-motion, interruption, performance, and screenshot/video QA |
+| Game/canvas/WebGL | `game-ui-frontend` or `interface-design` plus `references/game-canvas-contract.md` | Codex/frontend code | canvas/DPR/input/performance QA |
+| Native iOS | `axiom-ios-ui`, SwiftUI/HIG skill, or local iOS design owner plus `references/platforms-ios.md` | Codex/iOS code | simulator screenshots, UI hierarchy, Dynamic Type, accessibility |
+| Native Android | Android/Material/Compose owner plus `references/platforms-android.md` | Codex/Android code | emulator screenshots, UI tree, font scale, accessibility |
+| Cross-platform app | platform-specific owner per runtime | Codex code per runtime | separate QA contract per platform |
 | Final QA only | `frontend-testing-debugging` | none unless bugs found | QA ledger |
 
 ## Exit Routes

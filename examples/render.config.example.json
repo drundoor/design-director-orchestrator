@@ -1,0 +1,32 @@
+{
+  "$schema": "../scripts/render.config.schema.json",
+  "url": "http://127.0.0.1:5173",
+  "waitForSelector": "main",
+  "states": [
+    {
+      "name": "default",
+      "path": "/"
+    },
+    {
+      "name": "search-open",
+      "path": "/",
+      "actions": [
+        { "type": "fill", "selector": "#searchInput", "value": "sample" },
+        { "type": "waitForSelector", "selector": "#searchSuggestions" },
+        { "type": "waitForStableLayout", "ms": 250 }
+      ]
+    },
+    {
+      "name": "chart-crop",
+      "path": "/",
+      "actions": [
+        { "type": "screenshotElement", "selector": "[data-chart='primary']", "name": "primary-chart.png" }
+      ]
+    }
+  ],
+  "viewports": [
+    { "width": 375, "height": 900 },
+    { "width": 768, "height": 1024 },
+    { "width": 1440, "height": 1000 }
+  ]
+}

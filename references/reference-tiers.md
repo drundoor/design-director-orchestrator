@@ -1,6 +1,14 @@
 # Reference Tiers
 
-Use external references only after a local brief exists. Use at most three active external references in one pass, each with a distinct role.
+Use external references only after a local brief exists. Separate broad learning from implementation decisions.
+
+## Reference Depths
+
+- `reference_survey`: 4-12 sources for pattern discovery only. Output patterns, not design direction.
+- `active_references`: 1-5 sources that shape a direction. Each source needs a distinct role.
+- `implementation_locks`: 1-3 sources for concrete layout, motion, behavior, or component decisions.
+
+The important rule is not a fixed count. The rule is that no reference may override local truth, accessibility, data semantics, user anti-goals, or the design system.
 
 ## S0: Local Truth
 
@@ -113,8 +121,9 @@ references:
 Hard rules:
 
 - No references before brief.
-- Max three active references per pass.
-- Each reference needs a distinct role.
+- Record whether each source is `reference_survey`, `active_reference`, or `implementation_lock`.
+- Keep implementation locks to three or fewer unless the user explicitly asks for broader synthesis and accepts the extra QA burden.
+- Each active reference and implementation lock needs a distinct role.
 - Each reference needs `do_not_copy`.
 - At least one local signature must be named.
 - A result that could be mistaken for the reference fails.

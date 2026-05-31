@@ -1,4 +1,5 @@
 .DS_Store
+.codex-scratch-*.md
 .design-director/
 node_modules/
 npm-debug.log*

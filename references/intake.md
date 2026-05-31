@@ -20,13 +20,14 @@ Output a compact intake note before routing:
 ```md
 ## Design Intake
 
-- Mode: route-only | implement-and-verify | qa-only
+- Intent: audit | repair | revamp | concept | study | implement | qa
+- Platform/surface: web-app | marketing-web | dashboard | data-viz | game-canvas | native-ios | native-android | cross-platform | other
 - Files/screenshots read:
 - Missing local truth:
 - Source-of-truth ranking:
-- Surface:
 - Constraints that block visual invention:
 - User anti-goals:
+- State discovery needed: yes | no | waived because ...
 - Initial acceptance gates:
 ```
 

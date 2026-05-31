@@ -1,19 +1,9 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
-
-const DEFAULT_VIEWPORTS = [
-  { width: 320, height: 900 },
-  { width: 375, height: 900 },
-  { width: 414, height: 900 },
-  { width: 768, height: 1024 },
-  { width: 1024, height: 900 },
-  { width: 1280, height: 900 },
-  { width: 1440, height: 1000 },
-];
+import { runActions } from "./lib/actions.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = {
@@ -81,114 +71,6 @@ State actions can open active UI before auditing:
 }`;
 }
 
-async function readJsonIfExists(file) {
-  if (!file) return {};
-  try {
-    return JSON.parse(await fs.readFile(file, "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return {};
-    throw error;
-  }
-}
-
-async function loadPlaywright() {
-  try {
-    return await import("playwright");
-  } catch {
-    const candidates = [
-      process.env.DESIGN_DIRECTOR_NODE_MODULES,
-      process.env.NODE_REPL_NODE_MODULE_DIRS,
-      path.join(os.homedir(), ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules"),
-    ]
-      .filter(Boolean)
-      .flatMap((entry) => entry.split(":"))
-      .filter(Boolean);
-
-    for (const dir of candidates) {
-      try {
-        const requireFromDir = createRequire(path.join(dir, "design-director-require.cjs"));
-        return requireFromDir("playwright");
-      } catch {
-        // Try the next candidate.
-      }
-    }
-
-    throw new Error("Playwright is required for visual-consistency-audit.mjs. Install it in the target project or set DESIGN_DIRECTOR_NODE_MODULES to a node_modules directory containing Playwright.");
-  }
-}
-
-async function launchBrowser(chromium) {
-  try {
-    return await chromium.launch();
-  } catch (firstError) {
-    const fallbackErrors = [firstError.message];
-    try {
-      return await chromium.launch({ channel: "chrome" });
-    } catch (error) {
-      fallbackErrors.push(error.message);
-    }
-    const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-    try {
-      await fs.access(macChrome);
-      return await chromium.launch({ executablePath: macChrome });
-    } catch (error) {
-      fallbackErrors.push(error.message);
-    }
-    throw new Error(`Unable to launch Playwright browser. Tried bundled Chromium and system Chrome. ${fallbackErrors.join(" | ")}`);
-  }
-}
-
-function resolveTarget(baseUrl, state) {
-  if (state.url) return state.url;
-  if (state.path) return new URL(state.path, baseUrl).toString();
-  return baseUrl;
-}
-
-function parseViewports(value) {
-  if (!value) return null;
-  return value.split(",").map((part) => {
-    const [width, height = "900"] = part.split("x");
-    return { width: Number(width), height: Number(height) };
-  });
-}
-
-async function runActions(page, actions = [], timeout = 15000) {
-  for (const action of actions) {
-    const type = action.type || action.action;
-    if (type === "wait") {
-      await page.waitForTimeout(action.ms ?? action.waitMs ?? 250);
-    } else if (type === "waitForSelector") {
-      await page.waitForSelector(action.selector, { timeout: action.timeout ?? timeout, state: action.state || "visible" });
-    } else if (type === "click") {
-      await page.locator(action.selector).first().click({ timeout: action.timeout ?? timeout });
-    } else if (type === "fill") {
-      await page.locator(action.selector).first().fill(action.value ?? "", { timeout: action.timeout ?? timeout });
-    } else if (type === "type") {
-      await page.locator(action.selector).first().type(action.value ?? "", { delay: action.delay ?? 0, timeout: action.timeout ?? timeout });
-    } else if (type === "focus") {
-      await page.locator(action.selector).first().focus({ timeout: action.timeout ?? timeout });
-    } else if (type === "hover") {
-      await page.locator(action.selector).first().hover({ timeout: action.timeout ?? timeout });
-    } else if (type === "press") {
-      await page.locator(action.selector || "body").first().press(action.key, { timeout: action.timeout ?? timeout });
-    } else if (type === "select") {
-      await page.locator(action.selector).first().selectOption(action.value, { timeout: action.timeout ?? timeout });
-    } else if (type === "check") {
-      await page.locator(action.selector).first().check({ timeout: action.timeout ?? timeout });
-    } else if (type === "uncheck") {
-      await page.locator(action.selector).first().uncheck({ timeout: action.timeout ?? timeout });
-    } else if (type === "scrollIntoView") {
-      await page.locator(action.selector).first().scrollIntoViewIfNeeded({ timeout: action.timeout ?? timeout });
-    } else if (type === "scrollBy") {
-      await page.evaluate(({ x = 0, y = 0 }) => window.scrollBy(x, y), { x: action.x, y: action.y });
-    } else if (type === "scrollTo") {
-      await page.evaluate(({ x = 0, y = 0 }) => window.scrollTo(x, y), { x: action.x, y: action.y });
-    } else {
-      throw new Error(`Unknown state action: ${type}`);
-    }
-  }
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -236,13 +118,12 @@ async function main() {
         };
         try {
           await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: args.timeout });
-          if (state.waitForSelector || config.waitForSelector) {
-            await page.waitForSelector(state.waitForSelector || config.waitForSelector, { timeout: args.timeout });
-          }
-          if (state.waitMs || config.waitMs) {
-            await page.waitForTimeout(state.waitMs || config.waitMs);
-          }
-          await runActions(page, [...(config.actions || []), ...(state.actions || [])], args.timeout);
+          await preparePage(page, config, state, args.timeout);
+          entry.actionArtifacts = await runActions(page, [...(config.actions || []), ...(state.actions || [])], {
+            timeout: args.timeout,
+            stateName: entry.state,
+            viewport,
+          });
           entry.audit = await page.evaluate(
             ({ fontDeltaPx, alignDeltaPx, widthDeltaPx, gapRatio, maxFindings, maxElements, maxContainers }) => {
               const BLOCKER_LIMIT = maxFindings;
@@ -400,7 +281,7 @@ async function main() {
                   similarChildCount.set(sig, (similarChildCount.get(sig) || 0) + 1);
                 }
                 const hasRepeatedChildShape = [...similarChildCount.values()].some((count) => count >= 2);
-                if (!hasRepeatedChildShape && !/grid|metric|stat|key/i.test(classText(container))) continue;
+                if (!hasRepeatedChildShape && !/(grid|metrics|stats|key-list|metric-grid|stat-grid)/i.test(classText(container))) continue;
 
                 const childValues = childRects
                   .map(({ child }) => {
@@ -457,7 +338,7 @@ async function main() {
                     const lefts = rows.map((row) => row.items[col].rect.left);
                     const delta = Math.max(...lefts) - Math.min(...lefts);
                     if (delta > alignDeltaPx) {
-                      const roleLooksImportant = /grid|metric|stat|key/i.test(classText(container));
+                      const roleLooksImportant = /(grid|metrics|stats|key-list|metric-grid|stat-grid)/i.test(classText(container));
                       addFinding(roleLooksImportant ? "blocker" : "warning", {
                         type: "grid-column-alignment-drift",
                         selector: selectorFor(container),

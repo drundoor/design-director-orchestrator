@@ -20,8 +20,12 @@ Design Director is a Codex skill for governing UI design work that needs more th
 - `scripts/render-check.mjs`: Playwright screenshot and console/page-error capture.
 - `scripts/dom-audit.mjs`: DOM-level audit for overflow, clipping, text size, tap targets, labels, and hover-only candidates.
 - `scripts/visual-consistency-audit.mjs`: visual consistency and overlay stacking audit.
+- `scripts/discover-states.mjs`: active-state discovery for controls, overlays, scroll containers, charts, canvas/SVG, and form surfaces.
 - `scripts/qa-report.mjs`: merges audit artifacts into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
-- `SOURCES.md`: local source paths used to create this repository.
+- `scripts/lib/`: shared Playwright/browser/action/finding helpers.
+- `fixtures/`: generic paired good/bad fixtures for audit regression checks.
+- `examples/`: reusable example configs and QA note templates.
+- `PROVENANCE.md`: public-safe provenance for bundled files.
 - `REFERENCED_SKILLS.md`: referenced skills and license status notes.
 - `REFERENCE_LICENSE_POLICY.md`: external website, asset, component, and implementation-reference license policy.
 
@@ -41,6 +45,34 @@ If you prefer copying instead of symlinking:
 cp -R design-director-orchestrator ~/.codex/skills/design-director
 ```
 
+Or run the local installer from the cloned repo:
+
+```sh
+node scripts/install-local.mjs --symlink
+```
+
+Use `--copy` instead of `--symlink` if your environment does not support symlinks.
+
+## AI-Assisted Install Prompts
+
+For Codex:
+
+```text
+Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `node scripts/install-local.mjs --symlink`, then verify that `SKILL.md` is valid and that `npm test` passes.
+```
+
+For Claude or another coding agent:
+
+```text
+Clone https://github.com/drundoor/design-director-orchestrator. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them. Run `npm test` to verify the scripts.
+```
+
+Generic manual install:
+
+```text
+Put this repository at <AI skills directory>/design-director or add SKILL.md as the agent instruction entrypoint. Keep references/ and scripts/ next to SKILL.md so the agent can load them progressively.
+```
+
 ## When To Use It
 
 Use Design Director when a UI/design task has any of these characteristics:
@@ -53,18 +85,38 @@ Use Design Director when a UI/design task has any of these characteristics:
 
 For narrow CSS fixes, simple icon swaps, or one obvious single-specialist task, use the direct specialist instead.
 
+## Prompt Patterns
+
+Use intent plus platform/surface:
+
+- `audit + dashboard`: "Audit this dashboard and report design/interaction risks only. Do not change code."
+- `repair + web-app`: "Repair the mobile filter drawer clipping behind the chart and verify it."
+- `revamp + marketing-web`: "Revamp the homepage, preserve product constraints, and verify at mobile/tablet/desktop."
+- `study + web-app`: "Study these eight onboarding sites and extract transferable patterns only."
+- `concept + product-ui`: "Create three visual directions for the settings screen, no implementation yet."
+- `implement`: "Implement the chosen direction and run rendered QA on active states."
+- `qa + native-ios`: "Run native iOS QA on the SwiftUI app in Simulator, including Dynamic Type and dark mode."
+- `qa + native-android`: "Run Android visual/accessibility QA on the Compose screen in emulator."
+
+The intent is separate from the platform. Use `repair + native-ios` or `qa + native-android`; do not invent combined modes.
+
 ## Rendered QA Workflow
 
 1. Start the local app or point the config at a deployed URL.
-2. Create `.design-director/render.config.json`.
-3. Run the render, DOM, and visual-consistency audits.
-4. Inspect screenshots, including focused active states.
-5. Generate the QA report.
-6. Do not accept the design pass while unwaived blockers remain.
+2. Run state discovery or explicitly waive it for static pages.
+3. Create or update `.design-director/render.config.json`.
+4. Run the render, DOM, and visual-consistency audits.
+5. Generate screenshot notes and inspect screenshots, including focused active states.
+6. Generate the QA report.
+7. Do not accept the design pass while unwaived blockers remain.
 
 Example:
 
 ```sh
+node ~/.codex/skills/design-director/scripts/discover-states.mjs \
+  --url http://127.0.0.1:5173 \
+  --out .design-director
+
 node ~/.codex/skills/design-director/scripts/render-check.mjs \
   --config .design-director/render.config.json \
   --out .design-director
@@ -78,6 +130,7 @@ node ~/.codex/skills/design-director/scripts/visual-consistency-audit.mjs \
   --out .design-director
 
 node ~/.codex/skills/design-director/scripts/qa-report.mjs \
+  --init-notes \
   --out .design-director
 ```
 
@@ -124,7 +177,19 @@ The QA scripts support state actions so the design pass can inspect UI while it 
 }
 ```
 
-Supported action types include `click`, `fill`, `type`, `focus`, `hover`, `press`, `select`, `check`, `uncheck`, `wait`, `waitForSelector`, `scrollIntoView`, `scrollBy`, and `scrollTo`.
+Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`, `press`, `keyboardShortcut`, `select`, `check`, `uncheck`, `wait`, `waitForSelector`, `waitForNetworkIdle`, `waitForStableLayout`, `scrollIntoView`, `scrollBy`, `scrollTo`, `wheel`, `drag`, `resizeViewport`, `setViewport`, `setLocalStorage`, `setSessionStorage`, `clearStorage`, `assertVisible`, `assertHidden`, `assertText`, `assertNoHorizontalOverflow`, `screenshotElement`, and `scrollBoundaryCheck`.
+
+Validate config shape with `scripts/render.config.schema.json` when your editor or CI supports JSON Schema.
+
+## Reference Depth
+
+External references have three depths:
+
+- `reference_survey`: 4-12 sources for broad pattern discovery only.
+- `active_references`: 1-5 sources shaping a direction.
+- `implementation_locks`: 1-3 sources for concrete details.
+
+No reference may override local truth, accessibility, data semantics, design-system constraints, or user anti-goals.
 
 ## Browser Tool Rule
 
@@ -136,6 +201,6 @@ The skill requires interactive browser evidence, not just static screenshots.
 
 ## License Status
 
-This repository includes only the Design Director skill files copied from the local Codex skill directory. Other locally referenced skills are listed in `REFERENCED_SKILLS.md` and are not bundled unless an explicit license/source was found.
+This repository includes the Design Director skill files, public-safe references, generic fixtures, and supporting scripts. Other locally referenced skills are listed in `REFERENCED_SKILLS.md` and are not bundled unless an explicit license/source was found.
 
 No legal advice is provided here. Verify license terms before redistributing third-party skill content.
