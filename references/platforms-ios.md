@@ -35,3 +35,5 @@ Record:
 ## Acceptance
 
 Do not accept if essential content is clipped, inaccessible, blocked by keyboard/system chrome, unusable at common Dynamic Type sizes, missing labels, or contradicts the app's established iOS design system.
+
+For an operational report shape and command examples, use `references/native-ios-qa.md` and `examples/native-ios-qa.example.json`.

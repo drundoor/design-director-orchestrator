@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 function parseArgs(argv) {
-  const args = { mode: "symlink" };
+  const args = { mode: "symlink", name: "design-director" };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -17,6 +17,12 @@ function parseArgs(argv) {
       args.mode = "symlink";
     } else if (arg === "--target") {
       args.target = argv[++i];
+    } else if (arg === "--name") {
+      args.name = argv[++i];
+    } else if (arg === "--dry-run") {
+      args.dryRun = true;
+    } else if (arg === "--force" || arg === "--replace") {
+      args.force = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -25,11 +31,12 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: install-local.mjs [--symlink | --copy] [--target ~/.codex/skills/design-director]
+  return `Usage: install-local.mjs [--symlink | --copy] [--name design-director] [--target ~/.codex/skills/design-director] [--dry-run] [--force]
 
 Installs this repository as a local Codex skill. Symlink is the default so git
 pulls update the installed skill automatically. Use --copy when symlinks are
-not appropriate.`;
+not appropriate. Use --dry-run to print actions without changing files. Use
+--force only when replacing an existing install is intended.`;
 }
 
 function expandHome(value) {
@@ -58,7 +65,12 @@ async function main() {
 
   const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
   const skillsRoot = process.env.CODEX_HOME ? path.join(process.env.CODEX_HOME, "skills") : path.join(os.homedir(), ".codex", "skills");
-  const target = path.resolve(expandHome(args.target || path.join(skillsRoot, "design-director")));
+  const target = path.resolve(expandHome(args.target || path.join(skillsRoot, args.name)));
+
+  console.log(`install-local: repository ${repoRoot}`);
+  console.log(`install-local: target ${target}`);
+  console.log(`install-local: mode ${args.mode}${args.dryRun ? " (dry run)" : ""}`);
+  if (args.dryRun) return;
 
   await fs.mkdir(path.dirname(target), { recursive: true });
 
@@ -71,7 +83,10 @@ async function main() {
         return;
       }
     }
-    throw new Error(`Target already exists: ${target}. Remove it or pass --target to install elsewhere.`);
+    if (!args.force) {
+      throw new Error(`Target already exists: ${target}. Remove it, pass --target to install elsewhere, or use --force to replace it.`);
+    }
+    await fs.rm(target, { recursive: true, force: true });
   }
 
   if (args.mode === "copy") {
@@ -87,6 +102,7 @@ async function main() {
   }
 
   console.log(`install-local: installed ${args.mode} at ${target}`);
+  console.log("install-local: next steps: run `npm install`, `npx playwright install chromium`, and `npm test` in the repository.");
 }
 
 main().catch((error) => {

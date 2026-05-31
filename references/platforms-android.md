@@ -36,3 +36,5 @@ Record:
 ## Acceptance
 
 Do not accept if essential controls are too small, unlabeled, clipped by system bars/IME, unusable at larger font scales, hidden behind sheets/snackbars, or inconsistent with the app's Material/design-system conventions.
+
+For an operational report shape and command examples, use `references/native-android-qa.md` and `examples/native-android-qa.example.json`.

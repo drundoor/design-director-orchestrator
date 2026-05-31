@@ -250,8 +250,7 @@ async function main() {
                   const weightDelta = Math.max(...weights) - Math.min(...weights);
                   const lineDelta = lines.length ? Math.max(...lines) - Math.min(...lines) : 0;
                   if (sizeDelta > fontDeltaPx || weightDelta > 150 || lineDelta > 3) {
-                    const roleLooksImportant = textTokenRe.test(signature) || textTokenRe.test(classText(container));
-                    addFinding(roleLooksImportant ? "blocker" : "warning", {
+                    addFinding("warning", {
                       type: "peer-typography-mismatch",
                       selector: selectorFor(container),
                       peerSignature: signature,
@@ -301,8 +300,7 @@ async function main() {
                   const sizeDelta = Math.max(...sizes) - Math.min(...sizes);
                   const weightDelta = Math.max(...weights) - Math.min(...weights);
                   if (sizeDelta > fontDeltaPx || weightDelta > 150) {
-                    const roleLooksImportant = textTokenRe.test(classText(container)) || childValues.some((item) => textTokenRe.test(classText(item.child)));
-                    addFinding(roleLooksImportant ? "blocker" : "warning", {
+                    addFinding("warning", {
                       type: "peer-value-typography-mismatch",
                       selector: selectorFor(container),
                       message: `Repeated peer boxes have primary values with inconsistent typography: font-size delta ${sizeDelta.toFixed(1)}px, weight delta ${weightDelta.toFixed(0)}.`,
@@ -338,8 +336,7 @@ async function main() {
                     const lefts = rows.map((row) => row.items[col].rect.left);
                     const delta = Math.max(...lefts) - Math.min(...lefts);
                     if (delta > alignDeltaPx) {
-                      const roleLooksImportant = /(grid|metrics|stats|key-list|metric-grid|stat-grid)/i.test(classText(container));
-                      addFinding(roleLooksImportant ? "blocker" : "warning", {
+                      addFinding("warning", {
                         type: "grid-column-alignment-drift",
                         selector: selectorFor(container),
                         message: `Repeated grid children in column ${col + 1} do not share the same left edge; delta ${delta.toFixed(1)}px.`,
@@ -379,7 +376,7 @@ async function main() {
                 const median = positive[Math.floor(positive.length / 2)];
                 const outlier = gaps.find((gap) => gap.gap > Math.max(18, median * gapRatio));
                 if (outlier) {
-                  addFinding(/title|heading|header|meta/i.test(parentName) ? "blocker" : "warning", {
+                  addFinding("warning", {
                     type: "spacing-rhythm-outlier",
                     selector: selectorFor(parent),
                     message: `Adjacent inline items have a spacing outlier: ${outlier.gap.toFixed(1)}px gap vs local median ${median.toFixed(1)}px.`,
@@ -405,7 +402,7 @@ async function main() {
                   const previousRect = previous.getBoundingClientRect();
                   const widthDelta = Math.abs(currentRect.width - previousRect.width);
                   if (widthDelta > widthDeltaPx) {
-                    addFinding("blocker", {
+                    addFinding("warning", {
                       type: "related-width-mismatch",
                       selector: selectorFor(container),
                       message: `A details/summary control width differs from the preceding related panel by ${widthDelta.toFixed(1)}px.`,

@@ -14,6 +14,22 @@ export const LOW_FALSE_POSITIVE_BLOCKERS = new Set([
   "state-discovery-missing",
 ]);
 
+export const WARNING_BY_DEFAULT_FINDINGS = new Set([
+  "peer-typography-mismatch",
+  "peer-value-typography-mismatch",
+  "grid-column-alignment-drift",
+  "spacing-rhythm-outlier",
+  "related-width-mismatch",
+  "media-title-floating",
+  "camouflaged-control",
+]);
+
+export function qaSeverityForFinding(finding, fallback = SEVERITY.WARNING) {
+  if (WARNING_BY_DEFAULT_FINDINGS.has(finding?.type)) return SEVERITY.WARNING;
+  if (LOW_FALSE_POSITIVE_BLOCKERS.has(finding?.type)) return SEVERITY.BLOCKER;
+  return fallback;
+}
+
 export function createFindingCollector({ maxBlockers = 80, maxWarnings = 80, maxInfo = 120 } = {}) {
   const seen = new Set();
   const blockers = [];

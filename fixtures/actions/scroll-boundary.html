@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scroll Boundary Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      main {
+        padding: 20px;
+      }
+      .scrollbox {
+        width: 320px;
+        height: 160px;
+        overflow-y: auto;
+        border: 1px solid #999;
+      }
+      .item {
+        min-height: 56px;
+        padding: 12px;
+        border-bottom: 1px solid #ddd;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div id="scrollbox" class="scrollbox">
+        <div class="item">One</div>
+        <div class="item">Two</div>
+        <div class="item">Three</div>
+        <div class="item">Four</div>
+        <div class="item">Five</div>
+      </div>
+    </main>
+  </body>
+</html>

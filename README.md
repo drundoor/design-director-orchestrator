@@ -25,46 +25,72 @@ Design Director is a Codex skill for governing UI design work that needs more th
 - `scripts/lib/`: shared Playwright/browser/action/finding helpers.
 - `fixtures/`: generic paired good/bad fixtures for audit regression checks.
 - `examples/`: reusable example configs and QA note templates.
+- `references/native-ios-qa.md` and `references/native-android-qa.md`: operational report contracts for native app QA.
 - `PROVENANCE.md`: public-safe provenance for bundled files.
 - `REFERENCED_SKILLS.md`: referenced skills and license status notes.
 - `REFERENCE_LICENSE_POLICY.md`: external website, asset, component, and implementation-reference license policy.
 
 ## Installation
 
-Clone the repository and copy or symlink it into your Codex skills directory:
+Clone the repository, install dependencies, and run the smoke tests:
 
 ```sh
 git clone https://github.com/drundoor/design-director-orchestrator.git
+cd design-director-orchestrator
+npm install
+npx playwright install chromium
+npm test
+```
+
+Copy or symlink it into your Codex skills directory:
+
+```sh
 mkdir -p ~/.codex/skills
-ln -s "$(pwd)/design-director-orchestrator" ~/.codex/skills/design-director
+ln -s "$(pwd)" ~/.codex/skills/design-director
 ```
 
 If you prefer copying instead of symlinking:
 
 ```sh
-cp -R design-director-orchestrator ~/.codex/skills/design-director
+cp -R . ~/.codex/skills/design-director
 ```
 
 Or run the local installer from the cloned repo:
 
 ```sh
+node scripts/install-local.mjs --dry-run --symlink
 node scripts/install-local.mjs --symlink
 ```
 
-Use `--copy` instead of `--symlink` if your environment does not support symlinks.
+Use `--copy` instead of `--symlink` if your environment does not support symlinks. Use `--name <skill-name>` for non-Codex skill directories or `--target <path>` for a custom install path. Use `--force` only when replacing an existing install is intended.
+
+Expected verification output:
+
+```sh
+npm test
+# all tests pass
+node scripts/install-local.mjs --dry-run
+# prints repository, target, and mode without changing files
+```
+
+Troubleshooting:
+
+- If Playwright cannot launch a browser, run `npx playwright install chromium` or set `DESIGN_DIRECTOR_NODE_MODULES` to a `node_modules` folder containing Playwright.
+- If `~/.codex/skills/design-director` already exists, use a symlink to this clone, remove the old install yourself, or run `node scripts/install-local.mjs --force` after verifying the target.
+- If `qa-report.mjs` exits with `status: incomplete`, inspect `design-qa.md`; missing artifacts, generated screenshot-note templates, or missing discovery are acceptance failures unless `--static`, `--partial`, or a waiver is explicitly appropriate.
 
 ## AI-Assisted Install Prompts
 
 For Codex:
 
 ```text
-Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `node scripts/install-local.mjs --symlink`, then verify that `SKILL.md` is valid and that `npm test` passes.
+Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm install`, run `npx playwright install chromium`, run `node scripts/install-local.mjs --dry-run --symlink`, install with `node scripts/install-local.mjs --symlink`, then verify that `SKILL.md` is valid and that `npm test` passes.
 ```
 
 For Claude or another coding agent:
 
 ```text
-Clone https://github.com/drundoor/design-director-orchestrator. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them. Run `npm test` to verify the scripts.
+Clone https://github.com/drundoor/design-director-orchestrator. Run `npm install`, `npx playwright install chromium`, and `npm test`. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them.
 ```
 
 Generic manual install:
@@ -134,6 +160,8 @@ node ~/.codex/skills/design-director/scripts/qa-report.mjs \
   --out .design-director
 ```
 
+For non-interactive static pages, add `--static` to waive state discovery. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence.
+
 ## Active State Config
 
 The QA scripts support state actions so the design pass can inspect UI while it is actually being used. This is required for interactive surfaces.
@@ -177,9 +205,11 @@ The QA scripts support state actions so the design pass can inspect UI while it 
 }
 ```
 
-Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`, `press`, `keyboardShortcut`, `select`, `check`, `uncheck`, `wait`, `waitForSelector`, `waitForNetworkIdle`, `waitForStableLayout`, `scrollIntoView`, `scrollBy`, `scrollTo`, `wheel`, `drag`, `resizeViewport`, `setViewport`, `setLocalStorage`, `setSessionStorage`, `clearStorage`, `assertVisible`, `assertHidden`, `assertText`, `assertNoHorizontalOverflow`, `screenshotElement`, and `scrollBoundaryCheck`.
+Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`, `press`, `keyboardShortcut`, `select`, `check`, `uncheck`, `wait`, `waitForSelector`, `waitForNetworkIdle`, `waitForStableLayout`, `reload`, `scrollIntoView`, `scrollBy`, `scrollTo`, `wheel`, `drag`, `resizeViewport`, `setViewport`, `setLocalStorage`, `setSessionStorage`, `clearStorage`, `assertVisible`, `assertHidden`, `assertText`, `assertNoHorizontalOverflow`, `screenshotElement`, and `scrollBoundaryCheck`.
 
 Validate config shape with `scripts/render.config.schema.json` when your editor or CI supports JSON Schema.
+
+Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every waiver needs a check, reason, and evidence.
 
 ## Reference Depth
 

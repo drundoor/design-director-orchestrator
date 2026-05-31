@@ -2,6 +2,17 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SEVERITY, qaSeverityForFinding } from "./lib/findings.mjs";
+
+const REQUIRED_NOTE_FIELDS = [
+  "Viewport",
+  "State",
+  "URL",
+  "Observation",
+  "Pass/fail",
+  "Issues found",
+  "Waiver/evidence",
+];
 
 function parseArgs(argv) {
   const args = { out: ".design-director" };
@@ -13,8 +24,14 @@ function parseArgs(argv) {
       args.out = argv[++i];
     } else if (arg === "--notes") {
       args.notes = argv[++i];
+    } else if (arg === "--waivers") {
+      args.waivers = argv[++i];
     } else if (arg === "--init-notes") {
       args.initNotes = true;
+    } else if (arg === "--static") {
+      args.static = true;
+    } else if (arg === "--partial") {
+      args.partial = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -23,35 +40,31 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--init-notes]
+  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--init-notes] [--static] [--partial]
 
 Merges render-results.json, dom-audit.json, and visual-consistency-audit.json
-into design-qa.json and design-qa.md. Use --init-notes to create a screenshot
-inspection template from render-results.json before writing the report.`;
+into design-qa.json and design-qa.md. Missing evidence is incomplete/failing by
+default. Use --static to waive state discovery for non-interactive static pages.
+Use --partial only for draft reports that are not acceptance evidence.`;
 }
 
-async function readJson(file, fallback = null) {
+async function readJsonArtifact(file) {
   try {
-    return JSON.parse(await fs.readFile(file, "utf8"));
+    return { exists: true, path: file, data: JSON.parse(await fs.readFile(file, "utf8")) };
   } catch (error) {
-    if (error.code === "ENOENT") return fallback;
+    if (error.code === "ENOENT") return { exists: false, path: file, data: null };
     throw error;
   }
 }
 
-async function readText(file, fallback = "") {
-  if (!file) return fallback;
+async function readTextArtifact(file) {
+  if (!file) return { exists: false, path: null, text: "" };
   try {
-    return await fs.readFile(file, "utf8");
+    return { exists: true, path: file, text: await fs.readFile(file, "utf8") };
   } catch (error) {
-    if (error.code === "ENOENT") return fallback;
+    if (error.code === "ENOENT") return { exists: false, path: file, text: "" };
     throw error;
   }
-}
-
-function bullet(items) {
-  if (!items.length) return "- None recorded.";
-  return items.map((item) => `- ${item}`).join("\n");
 }
 
 async function pathExists(file) {
@@ -63,18 +76,89 @@ async function pathExists(file) {
   }
 }
 
+function bullet(items) {
+  if (!items.length) return "- None recorded.";
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
+function waiverArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value.waivers)) return value.waivers;
+  return [];
+}
+
+function normalizeCheck(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function hasWaiver(waivers, check) {
+  const target = normalizeCheck(check);
+  return waivers.find((waiver) => {
+    const waiverCheck = normalizeCheck(waiver.check || waiver.id || waiver.type);
+    return waiverCheck === target || waiverCheck === "*" || target.startsWith(`${waiverCheck}:`);
+  });
+}
+
+function loadScreenshots(render) {
+  const screenshots = [];
+  const seen = new Set();
+  const add = (item) => {
+    if (!item?.path || seen.has(item.path)) return;
+    seen.add(item.path);
+    screenshots.push(item);
+  };
+
+  for (const state of render?.states || []) {
+    if (state.screenshot) {
+      add({
+        path: state.screenshot,
+        type: "page",
+        state: state.state || "unknown",
+        viewport: state.viewport || null,
+        url: state.finalUrl || state.url || "unknown",
+      });
+    }
+    for (const artifact of state.actionArtifacts || []) {
+      if (artifact.type === "element-screenshot" && artifact.path) {
+        add({
+          path: artifact.path,
+          type: "element",
+          selector: artifact.selector,
+          state: state.state || "unknown",
+          viewport: artifact.viewport || state.viewport || null,
+          url: state.finalUrl || state.url || "unknown",
+        });
+      }
+    }
+  }
+
+  for (const screenshot of render?.screenshots || []) {
+    const state = (render?.states || []).find((entry) => entry.screenshot === screenshot);
+    add({
+      path: screenshot,
+      type: "page",
+      state: state?.state || "unknown",
+      viewport: state?.viewport || null,
+      url: state?.finalUrl || state?.url || "unknown",
+    });
+  }
+
+  return screenshots;
+}
+
 function screenshotNoteTemplate(render) {
-  const screenshots = render.screenshots || [];
+  const screenshots = loadScreenshots(render);
   const rows = screenshots.length
     ? screenshots.map((screenshot) => {
-        const state = (render.states || []).find((entry) => entry.screenshot === screenshot);
-        const viewport = state?.viewport ? `${state.viewport.width}x${state.viewport.height}` : "unknown";
-        return `## ${screenshot}
+        const viewport = screenshot.viewport ? `${screenshot.viewport.width}x${screenshot.viewport.height}` : "unknown";
+        const selectorLine = screenshot.selector ? `- Selector: ${screenshot.selector}\n` : "";
+        return `## ${screenshot.path}
 
 - Viewport: ${viewport}
-- State: ${state?.state || "unknown"}
-- URL: ${state?.finalUrl || state?.url || "unknown"}
-- Observation: TODO
+- State: ${screenshot.state || "unknown"}
+- URL: ${screenshot.url || "unknown"}
+${selectorLine}- Observation: TODO
 - Pass/fail: TODO
 - Issues found: TODO
 - Waiver/evidence: TODO
@@ -89,11 +173,80 @@ as inspection.
 ${rows}`;
 }
 
-function notesLookInspected(notes) {
-  const text = notes.trim();
-  if (!text) return false;
-  if (/\bTODO\b|generated template does not count/i.test(text)) return false;
-  return /pass|fail|observed|checked|verified|issue|waiv/i.test(text);
+function parseNoteSections(notes) {
+  const sections = new Map();
+  const lines = notes.split(/\r?\n/);
+  let current = null;
+  for (const line of lines) {
+    const heading = line.match(/^##\s+(.+?)\s*$/);
+    if (heading) {
+      current = { key: heading[1], lines: [] };
+      sections.set(current.key, current);
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+  return sections;
+}
+
+function parseFields(section) {
+  const fields = new Map();
+  for (const line of section?.lines || []) {
+    const match = line.match(/^-\s*([^:]+):\s*(.*)$/);
+    if (match) fields.set(match[1].trim().toLowerCase(), match[2].trim());
+  }
+  return fields;
+}
+
+function invalidFieldValue(field, value) {
+  if (!value || /\bTODO\b/i.test(value)) return true;
+  if (["Viewport", "State", "URL"].includes(field) && /^unknown$/i.test(value)) return true;
+  if (field === "Pass/fail" && !/\b(pass|fail|waiv|blocked|issue|not applicable|n\/a)\b/i.test(value)) return true;
+  return false;
+}
+
+async function validateScreenshotNotes({ screenshots, notesText, notesExists, outDir }) {
+  const sections = parseNoteSections(notesText);
+  const invalid = [];
+  let validCount = 0;
+
+  for (const screenshot of screenshots) {
+    const section = sections.get(screenshot.path);
+    const existingPath = path.isAbsolute(screenshot.path) ? screenshot.path : path.resolve(outDir, screenshot.path);
+    const screenshotExists = await pathExists(existingPath);
+    if (!screenshotExists) {
+      invalid.push(`${screenshot.path}: screenshot file is missing`);
+    }
+    if (!notesExists || !section) {
+      invalid.push(`${screenshot.path}: screenshot note section missing`);
+      continue;
+    }
+    const fields = parseFields(section);
+    const missingFields = [];
+    for (const field of REQUIRED_NOTE_FIELDS) {
+      const value = fields.get(field.toLowerCase());
+      if (invalidFieldValue(field, value)) missingFields.push(field);
+    }
+    if (missingFields.length) {
+      invalid.push(`${screenshot.path}: missing inspected fields (${missingFields.join(", ")})`);
+    } else if (screenshotExists) {
+      validCount += 1;
+    }
+  }
+
+  const generatedTemplate = /\bTODO\b|generated template does not count/i.test(notesText);
+  if (generatedTemplate) invalid.push("screenshot notes still contain generated-template TODO text");
+
+  return {
+    exists: notesExists,
+    requiredCount: screenshots.length,
+    validCount,
+    invalid,
+  };
+}
+
+function formatStateLabel(state) {
+  return `${state.state || "default"} ${state.viewport?.width || "?"}`;
 }
 
 async function main() {
@@ -105,29 +258,73 @@ async function main() {
 
   const outDir = path.resolve(args.out);
   await fs.mkdir(outDir, { recursive: true });
-  const render = await readJson(path.join(outDir, "render-results.json"), { states: [], screenshots: [] });
-  const dom = await readJson(path.join(outDir, "dom-audit.json"), { states: [] });
-  const visual = await readJson(path.join(outDir, "visual-consistency-audit.json"), { states: [] });
-  const discovery = await readJson(path.join(outDir, "discovered-states.json"), null);
+
+  const renderArtifact = await readJsonArtifact(path.join(outDir, "render-results.json"));
+  const domArtifact = await readJsonArtifact(path.join(outDir, "dom-audit.json"));
+  const visualArtifact = await readJsonArtifact(path.join(outDir, "visual-consistency-audit.json"));
+  const discoveryArtifact = await readJsonArtifact(path.join(outDir, "discovered-states.json"));
+  const waiversArtifact = await readJsonArtifact(args.waivers || path.join(outDir, "waivers.json"));
+  const waivers = waiverArray(waiversArtifact.data);
+
+  const render = renderArtifact.data || { states: [], screenshots: [] };
+  const dom = domArtifact.data || { states: [] };
+  const visual = visualArtifact.data || { states: [] };
   const notesPath = args.notes || path.join(outDir, "screenshot-notes.md");
-  if (args.initNotes && (render.screenshots || []).length && !(await pathExists(notesPath))) {
+
+  if (args.initNotes && loadScreenshots(render).length && !(await pathExists(notesPath))) {
     await fs.writeFile(notesPath, screenshotNoteTemplate(render));
   }
-  const notes = await readText(notesPath, "");
+  const notesArtifact = await readTextArtifact(notesPath);
 
   const blockers = [];
   const warnings = [];
+  const incomplete = [];
+
+  const addBlocker = (message, check) => {
+    const waiver = check ? hasWaiver(waivers, check) : null;
+    if (waiver) warnings.push(`waived blocker ${check}: ${message} (${waiver.reason || "no reason recorded"})`);
+    else blockers.push(message);
+  };
+  const addIncomplete = (message, check) => {
+    const waiver = check ? hasWaiver(waivers, check) : null;
+    if (waiver) warnings.push(`waived incomplete evidence ${check}: ${message} (${waiver.reason || "no reason recorded"})`);
+    else incomplete.push(message);
+  };
+
+  for (const artifact of [
+    ["render-results", renderArtifact],
+    ["dom-audit", domArtifact],
+    ["visual-consistency-audit", visualArtifact],
+  ]) {
+    const [name, result] = artifact;
+    if (!result.exists) addIncomplete(`${name}.json is missing`, name);
+  }
+
+  if (renderArtifact.exists && !(render.states || []).length) addIncomplete("render-results.json has no state entries", "render-results:empty");
+  if (domArtifact.exists && !(dom.states || []).length) addIncomplete("dom-audit.json has no state entries", "dom-audit:empty");
+  if (visualArtifact.exists && !(visual.states || []).length) addIncomplete("visual-consistency-audit.json has no state entries", "visual-consistency-audit:empty");
+
+  if (!args.static && !discoveryArtifact.exists) {
+    addIncomplete("state discovery output was not found; run discover-states.mjs or record a waiver", "state-discovery");
+  } else if (!args.static && discoveryArtifact.exists && !((discoveryArtifact.data?.candidates?.length || 0) || (discoveryArtifact.data?.scans?.length || 0))) {
+    addIncomplete("state discovery output exists but contains no candidates or scans", "state-discovery:empty");
+  }
 
   for (const state of render.states || []) {
-    if (state.error) blockers.push(`${state.state} ${state.viewport?.width || "?"}: render failed: ${state.error}`);
-    if (state.pageErrors?.length) blockers.push(`${state.state} ${state.viewport?.width || "?"}: ${state.pageErrors.length} page error(s)`);
-    if (state.consoleMessages?.length) warnings.push(`${state.state} ${state.viewport?.width || "?"}: ${state.consoleMessages.length} console warning/error candidate(s)`);
+    const label = formatStateLabel(state);
+    if (state.error) addBlocker(`${label}: render failed: ${state.error}`, "render-error");
+    if (state.pageErrors?.length) addBlocker(`${label}: ${state.pageErrors.length} page error(s)`, "page-error");
+    if (state.consoleErrors?.length) addBlocker(`${label}: ${state.consoleErrors.length} console error(s)`, "console-error");
+    const consoleWarnings = state.consoleWarnings || (state.consoleMessages || []).filter((message) => message.type === "warning");
+    if (consoleWarnings.length) warnings.push(`${label}: ${consoleWarnings.length} console warning candidate(s)`);
+    const legacyErrors = !state.consoleErrors && (state.consoleMessages || []).filter((message) => message.type === "error");
+    if (legacyErrors.length) addBlocker(`${label}: ${legacyErrors.length} console error(s)`, "console-error");
   }
 
   for (const state of dom.states || []) {
-    const label = `${state.state} ${state.viewport?.width || "?"}`;
-    if (state.error) blockers.push(`${label}: DOM audit failed: ${state.error}`);
-    if (state.audit?.overflow?.hasHorizontalOverflow) blockers.push(`${label}: horizontal overflow candidate`);
+    const label = formatStateLabel(state);
+    if (state.error) addBlocker(`${label}: DOM audit failed: ${state.error}`, "dom-audit-error");
+    if (state.audit?.overflow?.hasHorizontalOverflow) addBlocker(`${label}: horizontal overflow candidate`, "horizontal-overflow");
     if (state.audit?.clipped?.length) warnings.push(`${label}: ${state.audit.clipped.length} clipped text/control candidate(s)`);
     if (state.audit?.tinyText?.length) warnings.push(`${label}: ${state.audit.tinyText.length} tiny text candidate(s)`);
     if (state.audit?.smallTargets?.length) warnings.push(`${label}: ${state.audit.smallTargets.length} small tap target candidate(s)`);
@@ -136,31 +333,64 @@ async function main() {
   }
 
   for (const state of visual.states || []) {
-    const label = `${state.state} ${state.viewport?.width || "?"}`;
-    if (state.error) blockers.push(`${label}: visual consistency audit failed: ${state.error}`);
+    const label = formatStateLabel(state);
+    if (state.error) addBlocker(`${label}: visual consistency audit failed: ${state.error}`, "visual-audit-error");
     for (const finding of state.audit?.blockers || []) {
-      blockers.push(`${label}: ${finding.type}: ${finding.message}`);
+      if (qaSeverityForFinding(finding, SEVERITY.BLOCKER) === SEVERITY.WARNING) {
+        warnings.push(`${label}: ${finding.type}: ${finding.message}`);
+      } else {
+        addBlocker(`${label}: ${finding.type}: ${finding.message}`, finding.type);
+      }
     }
     if (state.audit?.warnings?.length) warnings.push(`${label}: ${state.audit.warnings.length} visual consistency warning candidate(s)`);
   }
 
-  if ((render.screenshots || []).length && !notesLookInspected(notes)) {
-    blockers.push("screenshots were generated but no screenshot inspection notes were found");
-  }
-  if ((render.screenshots || []).length && !discovery) {
-    blockers.push("state discovery output was not found; run discover-states.mjs or record a waiver");
+  const screenshots = loadScreenshots(render);
+  if (!screenshots.length) {
+    addIncomplete("no screenshots were produced by render-check.mjs", "screenshots");
   }
 
+  const screenshotNotes = await validateScreenshotNotes({
+    screenshots,
+    notesText: notesArtifact.text,
+    notesExists: notesArtifact.exists,
+    outDir,
+  });
+  if (screenshots.length && screenshotNotes.invalid.length) {
+    for (const issue of screenshotNotes.invalid) addIncomplete(issue, "screenshot-notes");
+  }
+
+  const evidenceCompleteness = {
+    partial: Boolean(args.partial),
+    static: Boolean(args.static),
+    artifacts: {
+      renderResults: { path: renderArtifact.path, exists: renderArtifact.exists, stateCount: render.states?.length || 0 },
+      domAudit: { path: domArtifact.path, exists: domArtifact.exists, stateCount: dom.states?.length || 0 },
+      visualConsistencyAudit: { path: visualArtifact.path, exists: visualArtifact.exists, stateCount: visual.states?.length || 0 },
+      stateDiscovery: { path: discoveryArtifact.path, exists: discoveryArtifact.exists, waived: Boolean(args.static || hasWaiver(waivers, "state-discovery")) },
+      waivers: { path: waiversArtifact.path, exists: waiversArtifact.exists, count: waivers.length },
+    },
+    screenshots: {
+      count: screenshots.length,
+      paths: screenshots.map((screenshot) => screenshot.path),
+      notes: screenshotNotes,
+    },
+  };
+
+  const status = blockers.length ? "fail" : incomplete.length ? "incomplete" : "pass";
   const qa = {
     generatedAt: new Date().toISOString(),
+    status,
     blockers,
+    incomplete,
     warnings,
-    screenshotCount: (render.screenshots || []).length,
-    screenshotNotesPath: notes.trim() ? notesPath : null,
-    stateDiscoveryPath: discovery ? path.join(outDir, "discovered-states.json") : null,
-    renderResultsPath: path.join(outDir, "render-results.json"),
-    domAuditPath: path.join(outDir, "dom-audit.json"),
-    visualConsistencyAuditPath: path.join(outDir, "visual-consistency-audit.json"),
+    screenshotCount: screenshots.length,
+    screenshotNotesPath: notesArtifact.exists ? notesPath : null,
+    stateDiscoveryPath: discoveryArtifact.exists ? discoveryArtifact.path : null,
+    renderResultsPath: renderArtifact.path,
+    domAuditPath: domArtifact.path,
+    visualConsistencyAuditPath: visualArtifact.path,
+    evidenceCompleteness,
   };
 
   const md = `# Design QA
@@ -169,15 +399,21 @@ Generated: ${qa.generatedAt}
 
 ## Status
 
+- Status: ${qa.status}
 - Blockers: ${blockers.length}
+- Incomplete evidence: ${incomplete.length}
 - Warnings: ${warnings.length}
 - Screenshots: ${qa.screenshotCount}
 - Screenshot notes: ${qa.screenshotNotesPath || "missing"}
-- State discovery: ${qa.stateDiscoveryPath || "missing"}
+- State discovery: ${args.static ? "waived by --static" : qa.stateDiscoveryPath || "missing"}
 
 ## Blockers
 
 ${bullet(blockers)}
+
+## Incomplete Evidence
+
+${bullet(incomplete)}
 
 ## Warnings
 
@@ -185,11 +421,11 @@ ${bullet(warnings)}
 
 ## Screenshot Manifest
 
-${bullet((render.screenshots || []).map((screenshot) => screenshot))}
+${bullet(screenshots.map((screenshot) => `${screenshot.path} (${screenshot.type}, ${screenshot.viewport ? `${screenshot.viewport.width}x${screenshot.viewport.height}` : "unknown viewport"}, ${screenshot.state})`))}
 
 ## Screenshot Inspection Notes
 
-${notes.trim() || "_Missing. Add inspected screenshot notes or waive this blocker with evidence._"}
+${notesArtifact.text.trim() || "_Missing. Add inspected screenshot notes or waive this blocker with evidence._"}
 
 ## Evidence Files
 
@@ -197,12 +433,13 @@ ${notes.trim() || "_Missing. Add inspected screenshot notes or waive this blocke
 - DOM audit: ${qa.domAuditPath}
 - Visual consistency audit: ${qa.visualConsistencyAuditPath}
 ${qa.stateDiscoveryPath ? `- State discovery: ${qa.stateDiscoveryPath}` : "- State discovery: missing"}
+- Waivers: ${waiversArtifact.exists ? waiversArtifact.path : "missing"}
 `;
 
   await fs.writeFile(path.join(outDir, "design-qa.json"), `${JSON.stringify(qa, null, 2)}\n`);
   await fs.writeFile(path.join(outDir, "design-qa.md"), md);
-  console.log(`qa-report: wrote ${path.join(outDir, "design-qa.md")} (${blockers.length} blockers)`);
-  if (blockers.length) process.exitCode = 1;
+  console.log(`qa-report: wrote ${path.join(outDir, "design-qa.md")} (${status}, ${blockers.length} blockers, ${incomplete.length} incomplete)`);
+  if (blockers.length || (incomplete.length && !args.partial)) process.exitCode = 1;
 }
 
 main().catch((error) => {

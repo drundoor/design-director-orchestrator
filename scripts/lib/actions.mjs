@@ -35,6 +35,10 @@ async function scrollBoundaryCheck(page, action) {
     elementTop: el.scrollTop,
     pageTop: window.scrollY,
     elementMax: el.scrollHeight - el.clientHeight,
+    pageMax: Math.max(0, Math.max(
+      document.documentElement.scrollHeight,
+      document.body?.scrollHeight || 0,
+    ) - window.innerHeight),
   }));
   await page.locator(selector).first().hover({ timeout: action.timeout });
   await page.mouse.wheel(action.x ?? action.deltaX ?? 0, deltaY);
@@ -43,10 +47,15 @@ async function scrollBoundaryCheck(page, action) {
     elementTop: el.scrollTop,
     pageTop: window.scrollY,
     elementMax: el.scrollHeight - el.clientHeight,
+    pageMax: Math.max(0, Math.max(
+      document.documentElement.scrollHeight,
+      document.body?.scrollHeight || 0,
+    ) - window.innerHeight),
   }));
   const atBoundaryBefore = deltaY < 0 ? before.elementTop <= 0 : before.elementTop >= before.elementMax - 1;
+  const pageCanScroll = deltaY < 0 ? before.pageTop > 0 : before.pageTop < before.pageMax - 1;
   const pageMoved = after.pageTop !== before.pageTop;
-  if (atBoundaryBefore && !pageMoved) {
+  if (atBoundaryBefore && pageCanScroll && !pageMoved) {
     throw new Error(`scrollBoundaryCheck failed for ${selector}: nested scroll was at boundary but page did not continue scrolling`);
   }
 }
@@ -54,7 +63,7 @@ async function scrollBoundaryCheck(page, action) {
 export async function runActions(page, actions = [], options = {}) {
   const timeout = options.timeout ?? 15000;
   const artifacts = options.artifacts || [];
-  for (const action of actions) {
+  for (const [actionIndex, action] of actions.entries()) {
     const type = action.type || action.action;
     if (type === "wait") {
       await page.waitForTimeout(action.ms ?? action.waitMs ?? 250);
@@ -62,6 +71,8 @@ export async function runActions(page, actions = [], options = {}) {
       await page.waitForSelector(action.selector, { timeout: action.timeout ?? timeout, state: action.state || "visible" });
     } else if (type === "waitForNetworkIdle") {
       await page.waitForLoadState("networkidle", { timeout: action.timeout ?? timeout });
+    } else if (type === "reload") {
+      await page.reload({ waitUntil: action.waitUntil || "domcontentloaded", timeout: action.timeout ?? timeout });
     } else if (type === "waitForStableLayout") {
       await waitForStableLayout(page, action.ms ?? action.waitMs ?? 250);
     } else if (type === "click") {
@@ -77,7 +88,8 @@ export async function runActions(page, actions = [], options = {}) {
     } else if (type === "hover") {
       await locatorFor(page, action.selector).hover({ timeout: action.timeout ?? timeout });
     } else if (type === "press" || type === "keyboardShortcut") {
-      await locatorFor(page, action.selector || "body").press(action.key || action.value, { timeout: action.timeout ?? timeout });
+      if (action.selector) await locatorFor(page, action.selector).press(action.key || action.value, { timeout: action.timeout ?? timeout });
+      else await page.keyboard.press(action.key || action.value);
     } else if (type === "select") {
       await locatorFor(page, action.selector).selectOption(action.value, { timeout: action.timeout ?? timeout });
     } else if (type === "check") {
@@ -137,10 +149,11 @@ export async function runActions(page, actions = [], options = {}) {
     } else if (type === "screenshotElement") {
       const screenshotDir = options.screenshotDir || action.outDir || ".design-director/screenshots";
       await fs.mkdir(screenshotDir, { recursive: true });
-      const name = action.name || `${options.stateName || "state"}-${slug(action.selector)}-${options.viewport?.width || "viewport"}.png`;
+      const viewportSlug = options.viewport ? `${options.viewport.width}x${options.viewport.height}` : "viewport";
+      const name = action.name || `${slug(options.stateName || "state")}-action-${actionIndex + 1}-${slug(action.selector)}-${viewportSlug}.png`;
       const file = path.join(screenshotDir, name);
       await locatorFor(page, action.selector).screenshot({ path: file, timeout: action.timeout ?? timeout });
-      artifacts.push({ type: "element-screenshot", path: file, selector: action.selector, action });
+      artifacts.push({ type: "element-screenshot", path: file, selector: action.selector, actionIndex, viewport: options.viewport || null, action });
     } else if (type === "scrollBoundaryCheck") {
       await scrollBoundaryCheck(page, { ...action, timeout: action.timeout ?? timeout });
     } else {

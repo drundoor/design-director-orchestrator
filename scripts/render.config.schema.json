@@ -7,6 +7,13 @@
   "additionalProperties": true,
   "properties": {
     "url": { "type": "string" },
+    "platform": {
+      "enum": ["web", "native-ios", "native-android", "game-canvas", "data-viz", "unknown"]
+    },
+    "surface": { "type": "string" },
+    "qaProfile": {
+      "enum": ["audit", "repair", "revamp", "implementation", "final-qa", "static"]
+    },
     "waitForSelector": { "type": "string" },
     "waitMs": { "type": "number", "minimum": 0 },
     "fullPage": { "type": "boolean" },
@@ -24,6 +31,10 @@
     "actions": {
       "type": "array",
       "items": { "$ref": "#/$defs/action" }
+    },
+    "waivers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/waiver" }
     },
     "states": {
       "type": "array",
@@ -67,6 +78,7 @@
             "waitForSelector",
             "waitForNetworkIdle",
             "waitForStableLayout",
+            "reload",
             "scrollIntoView",
             "scrollBy",
             "scrollTo",
@@ -91,6 +103,18 @@
         "ms": { "type": "number", "minimum": 0 },
         "waitMs": { "type": "number", "minimum": 0 },
         "timeout": { "type": "number", "minimum": 0 }
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "required": ["check", "reason"],
+      "additionalProperties": true,
+      "properties": {
+        "check": { "type": "string" },
+        "reason": { "type": "string" },
+        "evidence": { "type": "string" },
+        "owner": { "type": "string" },
+        "expires": { "type": "string" }
       }
     }
   }

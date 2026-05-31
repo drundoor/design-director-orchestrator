@@ -57,6 +57,7 @@ Rendered QA must exercise the interface the way a user will use it. Static defau
 - Before acceptance, configure and inspect active states for every relevant interactive surface: search suggestions, dropdowns, comboboxes, filter pickers, popovers, dialogs, menus, details/accordions, tabs, chart controls, hover/focus states, mobile navigation, and form validation.
 - Open overlays and menus in both mobile and desktop viewports when they exist. Verify they are visible, usable, above neighboring containers/charts/tables, not clipped, and reachable by keyboard/touch as applicable.
 - Run state discovery or explicitly waive it before final QA when a rendered web surface exists. A manually named default state is not enough for interfaces with controls, overlays, charts, forms, tabs, filters, or nested scroll.
+- Final QA must produce `design-qa.json` with `status: "pass"`. `status: "incomplete"` means evidence is missing or uninspected and is not acceptable for shipping.
 
 Load focused references only when relevant:
 
@@ -64,8 +65,8 @@ Load focused references only when relevant:
 - Motion/animation: `references/animation-motion.md`.
 - Dashboards/charts/maps/reports: `references/data-viz-contract.md`.
 - Games/canvas/WebGL: `references/game-canvas-contract.md`.
-- Native iOS: `references/platforms-ios.md`.
-- Native Android: `references/platforms-android.md`.
+- Native iOS: `references/platforms-ios.md`; use `references/native-ios-qa.md` for operational report shape.
+- Native Android: `references/platforms-android.md`; use `references/native-android-qa.md` for operational report shape.
 
 ## Reference Rule
 

@@ -1,0 +1,52 @@
+{
+  "platform": "native-android",
+  "target": {
+    "module": ":app",
+    "variant": "debug",
+    "device": "Pixel 8",
+    "apiLevel": "latest available",
+    "density": "default"
+  },
+  "tooling": {
+    "preferred": "Android emulator or device tooling",
+    "fallback": "Gradle, adb, UIAutomator, logcat",
+    "commandsOrToolCalls": [
+      "./gradlew :app:assembleDebug",
+      "adb install -r app/build/outputs/apk/debug/app-debug.apk",
+      "adb exec-out screencap -p"
+    ]
+  },
+  "matrix": [
+    {
+      "state": "home",
+      "theme": "light",
+      "fontScale": 1,
+      "displaySize": "default",
+      "screenshot": ".design-director/android-home-light.png",
+      "uiTree": ".design-director/android-home-light.xml",
+      "result": "pass"
+    },
+    {
+      "state": "filter-menu-open",
+      "theme": "dark",
+      "fontScale": 1.3,
+      "displaySize": "large",
+      "screenshot": ".design-director/android-filter-dark-large.png",
+      "uiTree": ".design-director/android-filter-dark-large.xml",
+      "result": "needs-review"
+    }
+  ],
+  "checks": {
+    "touchTargets48dp": "checked",
+    "fontScale": "checked",
+    "darkTheme": "checked",
+    "systemInsets": "checked",
+    "talkBackLabels": "checked",
+    "imeBehavior": "checked",
+    "reducedMotion": "not applicable",
+    "logsReviewed": "checked"
+  },
+  "blockers": [],
+  "warnings": [],
+  "waivers": []
+}

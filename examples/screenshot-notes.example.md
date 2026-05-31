@@ -1,6 +1,6 @@
 # Screenshot Inspection Notes
 
-## .design-director/screenshots/default-375.png
+## .design-director/screenshots/default-375x900.png
 
 - Viewport: 375x900
 - State: default
@@ -10,7 +10,7 @@
 - Issues found: None
 - Waiver/evidence: None
 
-## .design-director/screenshots/search-open-375.png
+## .design-director/screenshots/search-open-375x900.png
 
 - Viewport: 375x900
 - State: search-open

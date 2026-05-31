@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Route Discovery Fixture</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <script>
+      const route = new URLSearchParams(location.search).get("route") || "one";
+      const app = document.querySelector("#app");
+      if (route === "two") {
+        app.innerHTML = '<button id="routeTwoFilter" aria-expanded="false" aria-controls="routeTwoOptions">Route two filters</button><div id="routeTwoOptions" role="listbox" hidden><div role="option">A</div></div>';
+      } else {
+        app.innerHTML = '<select id="routeOneSort"><option>Newest</option><option>Oldest</option></select>';
+      }
+    </script>
+  </body>
+</html>

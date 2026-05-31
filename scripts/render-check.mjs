@@ -89,14 +89,19 @@ async function main() {
       for (const viewport of viewports) {
         const page = await browser.newPage({ viewport });
         const consoleMessages = [];
+        const consoleErrors = [];
+        const consoleWarnings = [];
         const pageErrors = [];
         page.on("console", (message) => {
           if (["error", "warning"].includes(message.type())) {
-            consoleMessages.push({
+            const entry = {
               type: message.type(),
               text: message.text(),
               location: message.location(),
-            });
+            };
+            consoleMessages.push(entry);
+            if (message.type() === "error") consoleErrors.push(entry);
+            else consoleWarnings.push(entry);
           }
         });
         page.on("pageerror", (error) => {
@@ -105,7 +110,7 @@ async function main() {
 
         const targetUrl = resolveTarget(baseUrl, state);
         const stateName = state.name || slug(state.path || state.url || "default");
-        const fileName = `${slug(stateName)}-${viewport.width}.png`;
+        const fileName = `${slug(stateName)}-${viewport.width}x${viewport.height}.png`;
         const screenshotPath = path.join(screenshotDir, fileName);
         const entry = {
           state: stateName,
@@ -113,6 +118,8 @@ async function main() {
           viewport,
           screenshot: screenshotPath,
           consoleMessages,
+          consoleErrors,
+          consoleWarnings,
           pageErrors,
           ok: false,
         };
@@ -127,16 +134,16 @@ async function main() {
             viewport,
           });
           await page.screenshot({ path: screenshotPath, fullPage: Boolean(config.fullPage ?? true) });
+          results.screenshots.push(screenshotPath);
           entry.title = await page.title();
           entry.finalUrl = page.url();
-          entry.ok = pageErrors.length === 0;
+          entry.ok = pageErrors.length === 0 && consoleErrors.length === 0;
         } catch (error) {
           entry.error = error.message;
         } finally {
           await page.close();
         }
 
-        results.screenshots.push(screenshotPath);
         results.states.push(entry);
       }
     }
@@ -145,7 +152,7 @@ async function main() {
   }
 
   await fs.writeFile(path.join(outDir, "render-results.json"), `${JSON.stringify(results, null, 2)}\n`);
-  const failures = results.states.filter((state) => state.error || state.pageErrors.length);
+  const failures = results.states.filter((state) => state.error || state.pageErrors.length || state.consoleErrors?.length);
   console.log(`render-check: wrote ${path.join(outDir, "render-results.json")} (${failures.length} failure candidates)`);
   if (failures.length) process.exitCode = 1;
 }

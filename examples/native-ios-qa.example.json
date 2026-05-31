@@ -1,0 +1,52 @@
+{
+  "platform": "native-ios",
+  "target": {
+    "workspace": "App.xcworkspace",
+    "scheme": "App",
+    "configuration": "Debug",
+    "simulator": "iPhone 16",
+    "osVersion": "latest available"
+  },
+  "tooling": {
+    "preferred": "XcodeBuildMCP",
+    "fallback": "xcodebuild, xcrun simctl, XCTest or XCUITest",
+    "commandsOrToolCalls": [
+      "session_show_defaults",
+      "build_run_sim",
+      "capture simulator screenshots"
+    ]
+  },
+  "matrix": [
+    {
+      "state": "home",
+      "appearance": "light",
+      "contentSize": "default",
+      "orientation": "portrait",
+      "screenshot": ".design-director/ios-home-light.png",
+      "uiHierarchy": ".design-director/ios-home-light-hierarchy.json",
+      "result": "pass"
+    },
+    {
+      "state": "form-focused",
+      "appearance": "dark",
+      "contentSize": "accessibilityLarge",
+      "orientation": "portrait",
+      "screenshot": ".design-director/ios-form-dark-large.png",
+      "uiHierarchy": ".design-director/ios-form-dark-large-hierarchy.json",
+      "result": "needs-review"
+    }
+  ],
+  "checks": {
+    "dynamicType": "checked",
+    "darkMode": "checked",
+    "safeAreas": "checked",
+    "keyboardAvoidance": "checked",
+    "voiceOverLabels": "checked",
+    "touchTargets": "checked",
+    "reducedMotion": "not applicable",
+    "logsReviewed": "checked"
+  },
+  "blockers": [],
+  "warnings": [],
+  "waivers": []
+}

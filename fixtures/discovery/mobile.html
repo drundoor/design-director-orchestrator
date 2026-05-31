@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mobile Discovery Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      main {
+        padding: 24px;
+      }
+      .mobile-menu {
+        display: none;
+      }
+      @media (max-width: 600px) {
+        .mobile-menu {
+          display: inline-flex;
+          min-width: 48px;
+          min-height: 44px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <button id="mobileMenuButton" class="mobile-menu" aria-expanded="false" aria-controls="mobileNav">Menu</button>
+      <nav id="mobileNav" hidden>
+        <a href="#one">One</a>
+      </nav>
+      <button id="payButton" type="submit">Pay now</button>
+      <script>
+        document.querySelector("#mobileMenuButton").addEventListener("click", () => {
+          document.querySelector("#mobileNav").hidden = false;
+        });
+      </script>
+    </main>
+  </body>
+</html>
