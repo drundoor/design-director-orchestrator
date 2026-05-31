@@ -1,0 +1,6 @@
+.DS_Store
+.design-director/
+node_modules/
+npm-debug.log*
+playwright-report/
+test-results/
