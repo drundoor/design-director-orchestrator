@@ -42,6 +42,9 @@ cd design-director-orchestrator
 npm install
 npx playwright install chromium
 npm test
+npm run smoke:web
+npm run smoke:native
+npm run smoke:native:fail
 ```
 
 Copy or symlink it into your Codex skills directory:
@@ -73,13 +76,15 @@ npm test
 # all tests pass
 node scripts/install-local.mjs --dry-run
 # prints repository, target, and mode without changing files
+npm run smoke:native:fail
+# exits successfully only when intentionally missing native evidence is rejected
 ```
 
 Troubleshooting:
 
 - If Playwright cannot launch a browser, run `npx playwright install chromium` or set `DESIGN_DIRECTOR_NODE_MODULES` to a `node_modules` folder containing Playwright.
 - If `~/.codex/skills/design-director` already exists, use a symlink to this clone, remove the old install yourself, or run `node scripts/install-local.mjs --force` after verifying the target.
-- If `qa-report.mjs` exits with `status: incomplete`, inspect `design-qa.md`; missing artifacts, generated screenshot-note templates, or missing discovery are acceptance failures unless `--static`, `--partial`, or a waiver is explicitly appropriate.
+- If `qa-report.mjs` exits with `status: incomplete`, inspect `design-qa.md`; missing artifacts, generated screenshot-note templates, or missing discovery are acceptance failures unless `--static`, `--partial`, or a scoped waiver is explicitly appropriate.
 
 ## AI-Assisted Install Prompts
 
@@ -143,6 +148,7 @@ Example:
 ```sh
 node ~/.codex/skills/design-director/scripts/discover-states.mjs \
   --url http://127.0.0.1:5173 \
+  --depth 2 \
   --out .design-director
 
 node ~/.codex/skills/design-director/scripts/render-check.mjs \
@@ -162,14 +168,53 @@ node ~/.codex/skills/design-director/scripts/qa-report.mjs \
   --out .design-director
 ```
 
-For non-interactive static pages, add `--static` to waive state discovery. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence.
+Final web acceptance means `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
+
+For non-interactive static pages only, add `--static` to waive state discovery. Static mode still fails if the DOM audit finds visible interactive controls. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence and exit nonzero unless `--allow-partial-exit-zero` is explicitly supplied.
+
+Minimum successful web QA artifact tree:
+
+```text
+.design-director/
+  render-results.json
+  dom-audit.json
+  visual-consistency-audit.json
+  screenshot-notes.md
+  design-qa.json
+  design-qa.md
+  screenshots/
+```
 
 For native apps, collect the platform report and validate it:
 
 ```sh
 node ~/.codex/skills/design-director/scripts/native-qa-report.mjs \
   --report .design-director/native-ios-qa.json \
+  --profile standard \
   --out .design-director
+```
+
+Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
+
+Minimum successful native QA artifact tree:
+
+```text
+.design-director/
+  native-ios-qa.json or native-android-qa.json
+  native-design-qa.json
+  native-design-qa.md
+  screenshots or platform-named image files
+  UI hierarchy/tree captures
+  runtime log capture
+```
+
+Native smoke samples:
+
+```sh
+npm run smoke:native
+# builds a lightweight passing native QA fixture
+npm run smoke:native:fail
+# builds a missing-evidence fixture and verifies the validator rejects it
 ```
 
 ## Active State Config
@@ -180,6 +225,8 @@ The QA scripts support state actions so the design pass can inspect UI while it 
 {
   "url": "http://127.0.0.1:5173",
   "waitForSelector": "main",
+  "qaProfile": "final-qa",
+  "surface": "dashboard",
   "states": [
     {
       "name": "default",
@@ -211,7 +258,13 @@ The QA scripts support state actions so the design pass can inspect UI while it 
     { "width": 375, "height": 900 },
     { "width": 768, "height": 1024 },
     { "width": 1440, "height": 1000 }
-  ]
+  ],
+  "visualAudit": {
+    "componentSelectors": [".card", "[data-card]"],
+    "peerValueSelectors": [".metric-value"],
+    "overlaySelectors": ["[role='listbox'][data-state='open']"],
+    "ignoreSelectors": [".visually-hidden"]
+  }
 }
 ```
 
@@ -219,7 +272,7 @@ Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`
 
 Validate config shape with `scripts/render.config.schema.json` when your editor or CI supports JSON Schema.
 
-Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every waiver needs a check, reason, evidence, owner, and expiry date.
+Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every final-QA waiver needs a check, reason, evidence, owner, and expiry date. Scope waivers to a state, selector, route, or viewport whenever possible; unused valid waivers fail the QA report so stale waivers do not accumulate.
 
 ## Reference Depth
 

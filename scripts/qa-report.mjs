@@ -32,6 +32,8 @@ function parseArgs(argv) {
       args.static = true;
     } else if (arg === "--partial") {
       args.partial = true;
+    } else if (arg === "--allow-partial-exit-zero") {
+      args.allowPartialExitZero = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -40,12 +42,14 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--init-notes] [--static] [--partial]
+  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero]
 
 Merges render-results.json, dom-audit.json, and visual-consistency-audit.json
 into design-qa.json and design-qa.md. Missing evidence is incomplete/failing by
 default. Use --static to waive state discovery for non-interactive static pages.
-Use --partial only for draft reports that are not acceptance evidence.`;
+Use --partial only for draft reports that are not acceptance evidence. Partial
+reports with incomplete evidence exit nonzero unless --allow-partial-exit-zero
+is explicitly supplied.`;
 }
 
 async function readJsonArtifact(file) {
@@ -101,6 +105,13 @@ function resolveEvidencePath(outDir, file) {
   return path.resolve(outDir, file);
 }
 
+function artifactPath(outDir, file) {
+  if (!file) return file;
+  const absolute = resolveEvidencePath(outDir, file);
+  if (!absolute) return file;
+  return path.relative(outDir, absolute).replaceAll(path.sep, "/");
+}
+
 function normalizeUrl(value) {
   if (!value) return "unknown-url";
   try {
@@ -119,11 +130,14 @@ function viewportKey(viewport = {}) {
   return `${viewport.width || "?"}x${viewport.height || "?"}`;
 }
 
+function stateIdForArtifact(state = {}) {
+  return state.stateId || state.id || state.state || state.name || "default";
+}
+
 function stateKey(state = {}) {
   return [
-    state.state || state.name || "default",
+    stateIdForArtifact(state),
     viewportKey(state.viewport),
-    normalizeUrl(state.finalUrl || state.url),
   ].join("|");
 }
 
@@ -141,6 +155,7 @@ async function inspectScreenshot(file, outDir) {
     const isPng = data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a;
     const isJpeg = data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
     const isWebp = data.length >= 12 && data.slice(0, 4).toString("ascii") === "RIFF" && data.slice(8, 12).toString("ascii") === "WEBP";
+    const dimensions = imageDimensions(data, { isPng, isJpeg, isWebp });
     const valid = data.length > 16 && (isPng || isJpeg || isWebp);
     return {
       path: file,
@@ -148,6 +163,8 @@ async function inspectScreenshot(file, outDir) {
       exists: true,
       valid,
       size: data.length,
+      width: dimensions?.width || null,
+      height: dimensions?.height || null,
       format: isPng ? "png" : isJpeg ? "jpeg" : isWebp ? "webp" : "unknown",
       reason: valid ? null : "not a valid PNG, JPEG, or WebP screenshot",
     };
@@ -155,6 +172,38 @@ async function inspectScreenshot(file, outDir) {
     if (error.code === "ENOENT") return { path: file, absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
     throw error;
   }
+}
+
+function imageDimensions(data, flags) {
+  if (flags.isPng && data.length >= 24) {
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  }
+  if (flags.isJpeg) {
+    let offset = 2;
+    while (offset + 9 < data.length) {
+      if (data[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = data[offset + 1];
+      const length = data.readUInt16BE(offset + 2);
+      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+        return { height: data.readUInt16BE(offset + 5), width: data.readUInt16BE(offset + 7) };
+      }
+      if (!length) break;
+      offset += 2 + length;
+    }
+  }
+  if (flags.isWebp && data.length >= 30) {
+    const subtype = data.slice(12, 16).toString("ascii");
+    if (subtype === "VP8X" && data.length >= 30) {
+      return {
+        width: 1 + data.readUIntLE(24, 3),
+        height: 1 + data.readUIntLE(27, 3),
+      };
+    }
+  }
+  return null;
 }
 
 async function validateWaivers(waivers, { outDir, partial }) {
@@ -165,9 +214,10 @@ async function validateWaivers(waivers, { outDir, partial }) {
     const check = normalizeCheck(waiver.check || waiver.id || waiver.type);
     if (!check) problems.push("check is required");
     if (check === "*") problems.push("wildcard waivers are not allowed");
-    for (const field of ["reason", "evidence", "owner", "expires"]) {
+    for (const field of ["reason", "evidence", "owner"]) {
       if (!String(waiver[field] || "").trim()) problems.push(`${field} is required`);
     }
+    if (!partial && !String(waiver.expires || "").trim()) problems.push("expires is required");
     if (waiver.expires && Number.isNaN(Date.parse(waiver.expires))) {
       problems.push("expires must be a parseable date");
     } else if (!partial && waiver.expires && Date.parse(waiver.expires) < Date.now()) {
@@ -184,11 +234,37 @@ async function validateWaivers(waivers, { outDir, partial }) {
   return { valid, invalid };
 }
 
-function hasWaiver(waivers, check) {
+const PREFIX_WAIVER_CHECKS = new Set(["coverage", "state-discovery"]);
+
+function matchScope(waiver, context = {}) {
+  const scope = waiver.scope || {};
+  const direct = {
+    stateId: waiver.stateId,
+    state: waiver.state,
+    selector: waiver.selector,
+    kind: waiver.kind,
+    url: waiver.url,
+    viewport: waiver.viewport,
+  };
+  const expected = { ...scope, ...Object.fromEntries(Object.entries(direct).filter(([, value]) => value !== undefined && value !== null && value !== "")) };
+  for (const [key, value] of Object.entries(expected)) {
+    if (key === "viewport") {
+      if (String(value) !== viewportKey(context.viewport || context.discoveredFrom?.viewport || {})) return false;
+    } else if (key === "url") {
+      if (normalizeUrl(value) !== normalizeUrl(context.url || context.finalUrl || context.discoveredFrom?.url)) return false;
+    } else if (context[key] !== value && context.discoveredFrom?.[key] !== value) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hasWaiver(waivers, check, context = {}) {
   const target = normalizeCheck(check);
   return waivers.find((waiver) => {
     const waiverCheck = normalizeCheck(waiver.check || waiver.id || waiver.type);
-    return waiverCheck === target || target.startsWith(`${waiverCheck}:`);
+    const checkMatches = waiverCheck === target || (PREFIX_WAIVER_CHECKS.has(waiverCheck) && target.startsWith(`${waiverCheck}:`));
+    return checkMatches && matchScope(waiver, context);
   });
 }
 
@@ -265,7 +341,7 @@ as inspection.
 ${rows}`;
 }
 
-function parseNoteSections(notes) {
+function parseNoteSections(notes, outDir) {
   const sections = new Map();
   const lines = notes.split(/\r?\n/);
   let current = null;
@@ -274,6 +350,7 @@ function parseNoteSections(notes) {
     if (heading) {
       current = { key: heading[1], lines: [] };
       sections.set(current.key, current);
+      sections.set(artifactPath(outDir, heading[1]), current);
     } else if (current) {
       current.lines.push(line);
     }
@@ -301,8 +378,31 @@ function issuesAreClear(value) {
   return /^(none|n\/a|not applicable|no issues?|no issue found|no visible issues?)\.?$/i.test(String(value || "").trim());
 }
 
+function screenshotDimensionProblems(screenshot, integrity) {
+  const problems = [];
+  if (!integrity.valid) return problems;
+  if (!integrity.width || !integrity.height) {
+    problems.push(`${screenshot.path}: screenshot dimensions could not be read`);
+    return problems;
+  }
+  if (screenshot.type === "page") {
+    const expectedWidth = Number(screenshot.viewport?.width || 0);
+    const expectedHeight = Number(screenshot.viewport?.height || 0);
+    if (expectedWidth && integrity.width < expectedWidth - 2) {
+      problems.push(`${screenshot.path}: page screenshot width ${integrity.width}px is smaller than viewport width ${expectedWidth}px`);
+    }
+    const minimumHeight = expectedHeight ? Math.min(120, expectedHeight) : 120;
+    if (integrity.height < minimumHeight) {
+      problems.push(`${screenshot.path}: page screenshot height ${integrity.height}px is not plausible for viewport ${viewportKey(screenshot.viewport)}`);
+    }
+  } else if (screenshot.type === "element" && (integrity.width < 24 || integrity.height < 24)) {
+    problems.push(`${screenshot.path}: element screenshot is too small (${integrity.width}x${integrity.height})`);
+  }
+  return problems;
+}
+
 async function validateScreenshotNotes({ screenshots, notesText, notesExists, outDir }) {
-  const sections = parseNoteSections(notesText);
+  const sections = parseNoteSections(notesText, outDir);
   const invalid = [];
   const failed = [];
   const integrity = [];
@@ -316,6 +416,8 @@ async function validateScreenshotNotes({ screenshots, notesText, notesExists, ou
       invalid.push(`${screenshot.path}: screenshot file is missing`);
     } else if (!screenshotIntegrity.valid) {
       invalid.push(`${screenshot.path}: ${screenshotIntegrity.reason}`);
+    } else {
+      invalid.push(...screenshotDimensionProblems(screenshot, screenshotIntegrity));
     }
     if (!notesExists || !section) {
       invalid.push(`${screenshot.path}: screenshot note section missing`);
@@ -358,20 +460,6 @@ function formatStateLabel(state) {
   return `${state.state || "default"} ${state.viewport?.width || "?"}`;
 }
 
-function actionSelectors(states = []) {
-  const selectors = new Set();
-  for (const state of states) {
-    if (state.discoveredFrom?.selector) selectors.add(state.discoveredFrom.selector);
-    for (const action of state.actions || []) {
-      if (action.selector) selectors.add(action.selector);
-    }
-    for (const artifact of state.actionArtifacts || []) {
-      if (artifact.selector) selectors.add(artifact.selector);
-    }
-  }
-  return selectors;
-}
-
 function stateCoverageItems(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -380,21 +468,66 @@ function stateCoverageItems(value) {
   return [];
 }
 
+function candidateScope(candidate = {}) {
+  return {
+    selector: candidate.selector,
+    kind: candidate.kind,
+    state: candidate.discoveredFrom?.state,
+    url: normalizeUrl(candidate.discoveredFrom?.url),
+    viewport: viewportKey(candidate.discoveredFrom?.viewport),
+  };
+}
+
+function candidateScopeMatches(candidate, item = {}) {
+  const expected = candidateScope(candidate);
+  const actual = item.discoveredFrom || item.scope || item;
+  if (candidate.selector && item.selector !== candidate.selector) return false;
+  if (candidate.kind && item.kind !== candidate.kind) return false;
+  if (expected.state && actual.state && actual.state !== expected.state) return false;
+  if (expected.url !== "unknown-url" && actual.url && normalizeUrl(actual.url) !== expected.url) return false;
+  const actualViewport = typeof actual.viewport === "string" ? actual.viewport : viewportKey(actual.viewport);
+  if (expected.viewport !== "?x?" && actual.viewport && actualViewport !== expected.viewport) return false;
+  return Boolean(actual.url && actual.viewport);
+}
+
 function dispositionForCandidate(candidate, stateCoverage) {
   const items = stateCoverageItems(stateCoverage);
   return items.find((item) => {
-    if (candidate.selector && item.selector === candidate.selector) return true;
-    if (candidate.kind && item.kind === candidate.kind && item.label === candidate.label) return true;
-    return false;
+    if (!candidateScopeMatches(candidate, item)) return false;
+    return true;
   });
 }
 
-function safeHighConfidenceCandidates(discovery) {
-  return (discovery?.candidates || []).filter((candidate) =>
-    candidate.selector &&
-    candidate.confidence === "high" &&
-    (candidate.mutationRisk || "safe") === "safe"
-  );
+const IMPORTANT_MEDIUM_KINDS = new Set(["chart-or-canvas", "scroll-container", "combobox", "text-input"]);
+
+function enforceMediumCandidates(render = {}) {
+  const qaProfile = render.qaProfile || "audit";
+  const surface = `${render.platform || ""} ${render.surface || ""}`.toLowerCase();
+  return qaProfile === "final-qa" || /\b(data-viz|dashboard|analytics|table|catalog)\b/.test(surface);
+}
+
+function enforcedCandidates(discovery, render = {}) {
+  const includeMedium = enforceMediumCandidates(render);
+  return (discovery?.candidates || []).filter((candidate) => {
+    if (!candidate.selector || (candidate.mutationRisk || "safe") !== "safe") return false;
+    if (candidate.confidence === "high") return true;
+    return includeMedium && candidate.confidence === "medium" && IMPORTANT_MEDIUM_KINDS.has(candidate.kind);
+  });
+}
+
+function renderedCandidate(candidate, states = []) {
+  return states.some((state) => {
+    if (state.discoveredFrom?.selector === candidate.selector && (!candidate.kind || state.discoveredFrom?.kind === candidate.kind)) {
+      if (candidateScopeMatches(candidate, { selector: candidate.selector, kind: candidate.kind, discoveredFrom: state.discoveredFrom })) return true;
+    }
+    const stateUrl = normalizeUrl(state.finalUrl || state.url);
+    const candidateUrl = normalizeUrl(candidate.discoveredFrom?.url);
+    const sameViewport = viewportKey(state.viewport) === viewportKey(candidate.discoveredFrom?.viewport);
+    const sameUrl = candidateUrl === "unknown-url" || stateUrl === candidateUrl;
+    if (!sameViewport || !sameUrl) return false;
+    return (state.actions || []).some((action) => action.selector === candidate.selector) ||
+      (state.actionArtifacts || []).some((artifact) => artifact.selector === candidate.selector);
+  });
 }
 
 function staticControlsFromDom(dom) {
@@ -453,18 +586,18 @@ async function main() {
   };
   const appliedWaivers = [];
 
-  const addBlocker = (message, check) => {
-    const waiver = check ? hasWaiver(waivers, check) : null;
+  const addBlocker = (message, check, context = {}) => {
+    const waiver = check ? hasWaiver(waivers, check, context) : null;
     if (waiver) {
-      appliedWaivers.push({ check, message, waiver });
+      appliedWaivers.push({ check, message, waiver, appliedTo: context });
       warnings.push(`waived blocker ${check}: ${message} (${waiver.reason || "no reason recorded"})`);
     }
     else blockers.push(message);
   };
-  const addIncomplete = (message, check) => {
-    const waiver = check ? hasWaiver(waivers, check) : null;
+  const addIncomplete = (message, check, context = {}) => {
+    const waiver = check ? hasWaiver(waivers, check, context) : null;
     if (waiver) {
-      appliedWaivers.push({ check, message, waiver });
+      appliedWaivers.push({ check, message, waiver, appliedTo: context });
       warnings.push(`waived incomplete evidence ${check}: ${message} (${waiver.reason || "no reason recorded"})`);
     }
     else incomplete.push(message);
@@ -497,12 +630,12 @@ async function main() {
     if (!domMatrix.has(key)) {
       const message = `${formatStateLabel(state)}: DOM audit missing for rendered state matrix key ${key}`;
       coverage.missingDomAudit.push({ key, state: state.state, viewport: state.viewport, url: state.finalUrl || state.url });
-      addIncomplete(message, "coverage:dom");
+      addIncomplete(message, "coverage:dom", state);
     }
     if (!visualMatrix.has(key)) {
       const message = `${formatStateLabel(state)}: visual audit missing for rendered state matrix key ${key}`;
       coverage.missingVisualAudit.push({ key, state: state.state, viewport: state.viewport, url: state.finalUrl || state.url });
-      addIncomplete(message, "coverage:visual");
+      addIncomplete(message, "coverage:visual", state);
     }
   }
 
@@ -512,7 +645,7 @@ async function main() {
     addIncomplete("state discovery output exists but contains no candidates or scans", "state-discovery:empty");
   }
 
-  if (args.static && !hasWaiver(waivers, "state-discovery")) {
+  if (args.static) {
     const controls = staticControlsFromDom(dom);
     coverage.staticControlEvidence = controls;
     if (!domArtifact.exists || (dom.states || []).some((state) => !Array.isArray(state.audit?.interactiveControls))) {
@@ -523,14 +656,15 @@ async function main() {
   }
 
   if (!args.static && discoveryArtifact.exists) {
-    const renderedSelectors = actionSelectors(render.states || []);
-    for (const candidate of safeHighConfidenceCandidates(discoveryArtifact.data)) {
+    for (const candidate of enforcedCandidates(discoveryArtifact.data, render)) {
       const disposition = dispositionForCandidate(candidate, stateCoverageArtifact.data);
-      const rendered = renderedSelectors.has(candidate.selector);
+      const rendered = renderedCandidate(candidate, render.states || []);
       const acceptableDisposition = disposition && ["rendered", "waived", "duplicate", "rejected", "low-value"].includes(disposition.disposition || disposition.coverage);
       if (!rendered && !acceptableDisposition) {
         coverage.unrenderedDiscoveredStates.push(candidate);
-        addIncomplete(`discovered state ${candidate.kind} ${candidate.selector} was not rendered, waived, or rejected in state-coverage.json`, "state-coverage");
+        addIncomplete(`discovered state ${candidate.kind} ${candidate.selector} at ${candidateScope(candidate).viewport} was not rendered, waived, or rejected in state-coverage.json with matching route and viewport`, "state-coverage", candidate);
+      } else if (disposition?.evidence && !(await pathExists(resolveEvidencePath(outDir, disposition.evidence)))) {
+        addIncomplete(`state-coverage evidence does not exist for ${candidate.kind} ${candidate.selector}: ${disposition.evidence}`, "state-coverage", candidate);
       }
     }
   }
@@ -588,16 +722,23 @@ async function main() {
     for (const issue of screenshotNotes.failed) addBlocker(issue, "screenshot-notes");
   }
 
+  const usedWaiverIndexes = new Set(appliedWaivers.map((entry) => entry.waiver.index));
+  for (const waiver of waivers) {
+    if (!usedWaiverIndexes.has(waiver.index)) {
+      incomplete.push(`waiver ${waiver.index + 1} is valid but unused; remove it or narrow it to a current finding`);
+    }
+  }
+
   const evidenceCompleteness = {
     partial: Boolean(args.partial),
     static: Boolean(args.static),
     artifacts: {
-      renderResults: { path: renderArtifact.path, exists: renderArtifact.exists, stateCount: render.states?.length || 0 },
-      domAudit: { path: domArtifact.path, exists: domArtifact.exists, stateCount: dom.states?.length || 0 },
-      visualConsistencyAudit: { path: visualArtifact.path, exists: visualArtifact.exists, stateCount: visual.states?.length || 0 },
-      stateDiscovery: { path: discoveryArtifact.path, exists: discoveryArtifact.exists, waived: Boolean(args.static || hasWaiver(waivers, "state-discovery")) },
-      stateCoverage: { path: stateCoverageArtifact.path, exists: stateCoverageArtifact.exists, count: stateCoverageItems(stateCoverageArtifact.data).length },
-      waivers: { path: waiversArtifact.path, exists: waiversArtifact.exists, count: rawWaivers.length, validCount: waivers.length, invalidCount: waiverValidation.invalid.length },
+      renderResults: { path: artifactPath(outDir, renderArtifact.path), exists: renderArtifact.exists, stateCount: render.states?.length || 0 },
+      domAudit: { path: artifactPath(outDir, domArtifact.path), exists: domArtifact.exists, stateCount: dom.states?.length || 0 },
+      visualConsistencyAudit: { path: artifactPath(outDir, visualArtifact.path), exists: visualArtifact.exists, stateCount: visual.states?.length || 0 },
+      stateDiscovery: { path: artifactPath(outDir, discoveryArtifact.path), exists: discoveryArtifact.exists, waived: Boolean(args.static || hasWaiver(waivers, "state-discovery")) },
+      stateCoverage: { path: artifactPath(outDir, stateCoverageArtifact.path), exists: stateCoverageArtifact.exists, count: stateCoverageItems(stateCoverageArtifact.data).length },
+      waivers: { path: artifactPath(outDir, waiversArtifact.path), exists: waiversArtifact.exists, count: rawWaivers.length, validCount: waivers.length, invalidCount: waiverValidation.invalid.length },
     },
     coverage,
     screenshots: {
@@ -615,12 +756,12 @@ async function main() {
     incomplete,
     warnings,
     screenshotCount: screenshots.length,
-    screenshotNotesPath: notesArtifact.exists ? notesPath : null,
-    stateDiscoveryPath: discoveryArtifact.exists ? discoveryArtifact.path : null,
-    renderResultsPath: renderArtifact.path,
-    domAuditPath: domArtifact.path,
-    visualConsistencyAuditPath: visualArtifact.path,
-    stateCoveragePath: stateCoverageArtifact.exists ? stateCoverageArtifact.path : null,
+    screenshotNotesPath: notesArtifact.exists ? artifactPath(outDir, notesPath) : null,
+    stateDiscoveryPath: discoveryArtifact.exists ? artifactPath(outDir, discoveryArtifact.path) : null,
+    renderResultsPath: artifactPath(outDir, renderArtifact.path),
+    domAuditPath: artifactPath(outDir, domArtifact.path),
+    visualConsistencyAuditPath: artifactPath(outDir, visualArtifact.path),
+    stateCoveragePath: stateCoverageArtifact.exists ? artifactPath(outDir, stateCoverageArtifact.path) : null,
     waiverValidation,
     appliedWaivers,
     evidenceCompleteness,
@@ -679,6 +820,7 @@ ${qa.stateDiscoveryPath ? `- State discovery: ${qa.stateDiscoveryPath}` : "- Sta
   }
   console.log(`qa-report: wrote ${path.join(outDir, "design-qa.md")} (${status}, ${blockers.length} blockers, ${incomplete.length} incomplete)`);
   if (blockers.length || (incomplete.length && !args.partial)) process.exitCode = 1;
+  else if (incomplete.length && args.partial && !args.allowPartialExitZero) process.exitCode = 2;
 }
 
 main().catch((error) => {

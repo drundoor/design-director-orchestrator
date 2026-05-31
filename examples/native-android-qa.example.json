@@ -19,6 +19,7 @@
   "matrix": [
     {
       "state": "home",
+      "profile": "default-light",
       "theme": "light",
       "fontScale": 1,
       "displaySize": "default",
@@ -28,12 +29,14 @@
     },
     {
       "state": "filter-menu-open",
+      "profiles": ["dark", "font-scale-large", "ime-focused"],
       "theme": "dark",
       "fontScale": 1.3,
       "displaySize": "large",
+      "ime": true,
       "screenshot": ".design-director/android-filter-dark-large.png",
       "uiTree": ".design-director/android-filter-dark-large.xml",
-      "result": "needs-review"
+      "result": "pass"
     }
   ],
   "checks": {

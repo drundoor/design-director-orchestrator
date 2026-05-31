@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, preparePage, readJsonIfExists, resolveTarget } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, preparePage, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000, minTextPx: 12, minTargetPx: 44 };
@@ -53,6 +53,7 @@ async function main() {
   const states = config.states?.length ? config.states : [{ name: "default" }];
   const viewports = config.viewports || DEFAULT_VIEWPORTS;
   const outDir = path.resolve(args.out);
+  const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(outDir, { recursive: true });
 
   const { chromium } = await loadPlaywright();
@@ -66,14 +67,18 @@ async function main() {
   };
 
   try {
-    for (const state of states) {
+    for (const [stateIndex, state] of states.entries()) {
       for (const viewport of viewports) {
         const page = await browser.newPage({ viewport });
         const targetUrl = resolveTarget(baseUrl, state);
+        const stateName = stateNameFor(state);
         const entry = {
-          state: state.name || "default",
+          state: stateName,
+          stateId: stateIdFor(state, stateIndex),
           url: targetUrl,
           viewport,
+          actions: [...(config.actions || []), ...(state.actions || [])],
+          discoveredFrom: state.discoveredFrom || null,
           ok: false,
         };
         try {
@@ -81,9 +86,12 @@ async function main() {
           await preparePage(page, config, state, args.timeout);
           entry.actionArtifacts = await runActions(page, [...(config.actions || []), ...(state.actions || [])], {
             timeout: args.timeout,
+            screenshotDir,
+            artifactPathBase: outDir,
             stateName: entry.state,
             viewport,
           });
+          entry.finalUrl = page.url();
           entry.audit = await page.evaluate(({ minTextPx, minTargetPx }) => {
             const interestingRoles = new Set(["button", "link", "menuitem", "tab", "checkbox", "radio", "switch"]);
             const selector = [
@@ -197,6 +205,7 @@ async function main() {
 
             return { overflow, clipped, tinyText, smallTargets, unlabeledFocusable, hoverOnlyCandidates, interactiveControls };
           }, { minTextPx: args.minTextPx, minTargetPx: args.minTargetPx });
+          entry.finalUrl = page.url();
           entry.ok = true;
         } catch (error) {
           entry.error = error.message;

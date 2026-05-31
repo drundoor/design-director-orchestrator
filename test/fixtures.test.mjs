@@ -10,7 +10,20 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const node = process.execPath;
-const png1x1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
+
+function pngBytes(width = 375, height = 700) {
+  const data = Buffer.alloc(64);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(data, 0);
+  data.writeUInt32BE(13, 8);
+  data.write("IHDR", 12, "ascii");
+  data.writeUInt32BE(width, 16);
+  data.writeUInt32BE(height, 20);
+  data[24] = 8;
+  data[25] = 6;
+  return data;
+}
+
+const pagePng = pngBytes(375, 700);
 
 async function runScript(args, options = {}) {
   return execFileAsync(node, args, {
@@ -44,7 +57,7 @@ async function createQaArtifacts(out, overrides = {}) {
   const screenshot = overrides.screenshot || path.join(out, "screenshots/default-375x700.png");
   if (!overrides.skipScreenshotFile) {
     await fs.mkdir(path.dirname(screenshot), { recursive: true });
-    await fs.writeFile(screenshot, overrides.screenshotBytes || png1x1);
+    await fs.writeFile(screenshot, overrides.screenshotBytes || pagePng);
   }
   const state = {
     state: "default",
@@ -126,6 +139,20 @@ test("discover-states scans multiple configured routes", async () => {
   assert.ok(discovered.candidates.some((candidate) => candidate.selector === "#routeTwoFilter"));
 });
 
+test("discover-states --depth 2 emits grouped drawer search state", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-discover-depth-"));
+  const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/discovery/depth.html")).toString();
+  await runScript(["scripts/discover-states.mjs", "--url", fixtureUrl, "--out", out, "--viewports", "375x700", "--depth", "2"]);
+  const discovered = JSON.parse(await fs.readFile(path.join(out, "discovered-states.json"), "utf8"));
+  const draft = JSON.parse(await fs.readFile(path.join(out, "render.config.discovered.json"), "utf8"));
+
+  assert.ok(discovered.candidates.some((candidate) => candidate.depth === 2 && candidate.selector === "#drawerSearch"));
+  assert.ok(draft.states.some((state) =>
+    (state.actions || []).some((action) => action.selector === "#filtersButton") &&
+    (state.actions || []).some((action) => action.selector === "#drawerSearch" && action.type === "fill")
+  ));
+});
+
 test("visual audit detects bad overlay and peer value fixture", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-visual-bad-"));
   const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/bad.html")).toString();
@@ -156,8 +183,8 @@ test("visual audit detects bad overlay and peer value fixture", async () => {
   assert.ok([...blockers, ...warnings].some((finding) => finding.type === "peer-value-typography-mismatch"));
 });
 
-test("visual audit leaves fixed and hierarchy fixtures without blockers", async () => {
-  for (const fixture of ["fixed.html", "hierarchy.html", "data-grid.html"]) {
+test("visual audit leaves fixed, hierarchy, and normal flow role fixtures without blockers", async () => {
+  for (const fixture of ["fixed.html", "hierarchy.html", "data-grid.html", "listbox-flow.html"]) {
     const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-visual-fixed-"));
     const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants", fixture)).toString();
     await runScript(["scripts/visual-consistency-audit.mjs", "--url", fixtureUrl, "--out", out, "--viewports", "375x700", "--max-elements", "500"]);
@@ -194,10 +221,39 @@ test("scrollBoundaryCheck passes when page cannot scroll farther in the wheel di
   assert.equal(render.states[0].ok, true);
 });
 
+test("render, DOM, and visual audits record finalUrl after route-changing actions", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-route-final-url-"));
+  const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/actions/route-change.html")).toString();
+  const configPath = path.join(out, "render.config.json");
+  await writeJson(configPath, {
+    url: fixtureUrl,
+    viewports: [{ width: 375, height: 700 }],
+    states: [
+      {
+        name: "details-open",
+        actions: [
+          { type: "click", selector: "#routeButton" },
+          { type: "waitForStableLayout", ms: 100 }
+        ]
+      }
+    ]
+  });
+
+  await runScript(["scripts/render-check.mjs", "--config", configPath, "--out", out]);
+  await runScript(["scripts/dom-audit.mjs", "--config", configPath, "--out", out]);
+  await runScript(["scripts/visual-consistency-audit.mjs", "--config", configPath, "--out", out]);
+  const render = JSON.parse(await fs.readFile(path.join(out, "render-results.json"), "utf8"));
+  const dom = JSON.parse(await fs.readFile(path.join(out, "dom-audit.json"), "utf8"));
+  const visual = JSON.parse(await fs.readFile(path.join(out, "visual-consistency-audit.json"), "utf8"));
+  assert.match(render.states[0].finalUrl, /view=details/);
+  assert.match(dom.states[0].finalUrl, /view=details/);
+  assert.match(visual.states[0].finalUrl, /view=details/);
+});
+
 test("qa-report initializes notes but keeps template as blocker", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-"));
   await fs.mkdir(path.join(out, "screenshots"), { recursive: true });
-  await fs.writeFile(path.join(out, "screenshots/default-375x700.png"), png1x1);
+  await fs.writeFile(path.join(out, "screenshots/default-375x700.png"), pagePng);
   await fs.writeFile(path.join(out, "render-results.json"), JSON.stringify({
     screenshots: [path.join(out, "screenshots/default-375x700.png")],
     states: [
@@ -280,8 +336,8 @@ test("qa-report requires DOM and visual audit coverage for every rendered state"
   const first = path.join(out, "screenshots/default-375x700.png");
   const second = path.join(out, "screenshots/details-375x700.png");
   await fs.mkdir(path.dirname(first), { recursive: true });
-  await fs.writeFile(first, png1x1);
-  await fs.writeFile(second, png1x1);
+  await fs.writeFile(first, pagePng);
+  await fs.writeFile(second, pagePng);
   await writeJson(path.join(out, "render-results.json"), {
     screenshots: [first, second],
     states: [
@@ -314,6 +370,56 @@ test("qa-report requires discovered high-confidence safe candidates to be dispos
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.ok(qa.incomplete.some((issue) => issue.includes("state-coverage.json")));
   assert.ok(qa.evidenceCompleteness.coverage.unrenderedDiscoveredStates.some((candidate) => candidate.selector === "#mobileMenuButton"));
+});
+
+test("qa-report requires state coverage disposition to match route and viewport", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-state-scope-"));
+  await createQaArtifacts(out, {
+    discovery: {
+      candidates: [{
+        kind: "overlay-trigger",
+        selector: "#menuButton",
+        confidence: "high",
+        mutationRisk: "safe",
+        discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: { width: 375, height: 700 } }
+      }],
+      scans: [{ ok: true }]
+    }
+  });
+  await writeJson(path.join(out, "state-coverage.json"), {
+    dispositions: [{
+      kind: "overlay-trigger",
+      selector: "#menuButton",
+      disposition: "rendered",
+      discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: "1440x1000" },
+      evidence: "screenshots/default-375x700.png"
+    }]
+  });
+
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("matching route and viewport")));
+});
+
+test("qa-report enforces important medium-confidence candidates for final QA", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-medium-candidate-"));
+  await createQaArtifacts(out, {
+    render: { qaProfile: "final-qa", surface: "dashboard" },
+    discovery: {
+      candidates: [{
+        kind: "chart-or-canvas",
+        selector: "#primaryChart",
+        confidence: "medium",
+        mutationRisk: "safe",
+        discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: { width: 375, height: 700 } }
+      }],
+      scans: [{ ok: true }]
+    }
+  });
+
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.evidenceCompleteness.coverage.unrenderedDiscoveredStates.some((candidate) => candidate.selector === "#primaryChart"));
 });
 
 test("qa-report fails when screenshot notes record a failed inspection", async () => {
@@ -358,6 +464,14 @@ test("qa-report rejects fake screenshot files", async () => {
   assert.ok(qa.incomplete.some((issue) => issue.includes("not a valid PNG")));
 });
 
+test("qa-report rejects tiny page screenshots", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-tiny-shot-"));
+  await createQaArtifacts(out, { screenshotBytes: pngBytes(1, 1) });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("page screenshot width 1px")));
+});
+
 test("qa-report --static fails when DOM audit shows interactive controls", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-static-misuse-"));
   await createQaArtifacts(out, {
@@ -373,6 +487,15 @@ test("qa-report --static fails when DOM audit shows interactive controls", async
       }]
     }
   });
+  await writeJson(path.join(out, "waivers.json"), [
+    {
+      check: "state-discovery",
+      reason: "Static page waiver should not bypass visible controls.",
+      evidence: "screenshots/default-375x700.png",
+      owner: "qa",
+      expires: "2999-01-01"
+    }
+  ]);
   await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.ok(qa.incomplete.some((issue) => issue.includes("--static used but DOM audit found")));
@@ -404,7 +527,7 @@ test("qa-report screenshot note template includes element screenshots", async ()
 
 test("native-qa-report passes complete iOS evidence", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-ios-"));
-  await fs.writeFile(path.join(out, "home.png"), png1x1);
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
   await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
   await writeJson(path.join(out, "native-ios-qa.json"), {
@@ -421,6 +544,7 @@ test("native-qa-report passes complete iOS evidence", async () => {
     matrix: [
       {
         state: "home",
+        profiles: ["default-light", "dark", "large-text", "keyboard-focused"],
         appearance: "light",
         contentSize: "default",
         orientation: "portrait",
@@ -477,4 +601,69 @@ test("native-qa-report rejects missing Android screenshot, tree, and logs", asyn
   assert.ok(qa.incomplete.some((issue) => issue.includes("screenshot missing.png file is missing")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("uiTree missing.xml file is missing")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("logs: missing-logcat.txt file is missing")));
+});
+
+test("native-qa-report treats needs-review as incomplete acceptance evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-review-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "tree.xml"), "<hierarchy />");
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-android-qa.json"), {
+    platform: "native-android",
+    target: { module: ":app", variant: "debug", device: "Pixel 8", apiLevel: 35 },
+    tooling: { commandsOrToolCalls: ["./gradlew :app:assembleDebug"] },
+    matrix: [
+      {
+        state: "home",
+        profiles: ["default-light", "dark", "font-scale-large", "ime-focused"],
+        theme: "light",
+        fontScale: 1.3,
+        displaySize: "default",
+        ime: true,
+        screenshot: "home.png",
+        uiTree: "tree.xml",
+        result: "needs-review"
+      }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-android-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.equal(qa.status, "incomplete");
+  assert.equal(qa.acceptanceReady, false);
+  assert.ok(qa.incomplete.some((issue) => issue.includes("result needs review")));
+});
+
+test("native-qa-report fails crash signatures in logs", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-crash-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "tree.xml"), "<hierarchy />");
+  await fs.writeFile(path.join(out, "runtime.log"), "FATAL EXCEPTION: main\n");
+  await writeJson(path.join(out, "native-android-qa.json"), {
+    platform: "native-android",
+    target: { module: ":app", variant: "debug", device: "Pixel 8", apiLevel: 35 },
+    tooling: { commandsOrToolCalls: ["./gradlew :app:assembleDebug"] },
+    matrix: [
+      {
+        state: "home",
+        profiles: ["default-light", "dark", "font-scale-large", "ime-focused"],
+        theme: "light",
+        fontScale: 1.3,
+        displaySize: "default",
+        ime: true,
+        screenshot: "home.png",
+        uiTree: "tree.xml",
+        result: "pass"
+      }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-android-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.equal(qa.status, "fail");
+  assert.ok(qa.blockers.some((issue) => issue.includes("contains crash signature")));
 });

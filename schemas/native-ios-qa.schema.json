@@ -46,9 +46,15 @@
         "additionalProperties": true,
         "properties": {
           "state": { "type": "string", "minLength": 1 },
+          "profile": { "type": "string" },
+          "profiles": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
           "appearance": { "enum": ["light", "dark", "both"] },
           "contentSize": { "type": "string", "minLength": 1 },
           "orientation": { "type": "string", "minLength": 1 },
+          "keyboard": { "type": "boolean" },
           "screenshot": { "type": "string", "minLength": 1 },
           "uiHierarchy": { "type": "string", "minLength": 1 },
           "result": { "enum": ["pass", "needs-review", "fail", "blocked"] }

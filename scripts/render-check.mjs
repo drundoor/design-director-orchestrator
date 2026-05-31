@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, slug, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000 };
@@ -80,12 +80,15 @@ async function main() {
     generatedAt: new Date().toISOString(),
     baseUrl,
     config: args.config || null,
+    qaProfile: config.qaProfile || null,
+    surface: config.surface || null,
+    platform: config.platform || "web",
     screenshots: [],
     states: [],
   };
 
   try {
-    for (const state of states) {
+    for (const [stateIndex, state] of states.entries()) {
       for (const viewport of viewports) {
         const page = await browser.newPage({ viewport });
         const consoleMessages = [];
@@ -109,14 +112,17 @@ async function main() {
         });
 
         const targetUrl = resolveTarget(baseUrl, state);
-        const stateName = state.name || slug(state.path || state.url || "default");
+        const stateName = stateNameFor(state);
+        const stateId = stateIdFor(state, stateIndex);
         const fileName = `${slug(stateName)}-${viewport.width}x${viewport.height}.png`;
         const screenshotPath = path.join(screenshotDir, fileName);
+        const screenshotArtifactPath = relativeArtifactPath(outDir, screenshotPath);
         const entry = {
           state: stateName,
+          stateId,
           url: targetUrl,
           viewport,
-          screenshot: screenshotPath,
+          screenshot: screenshotArtifactPath,
           actions: [...(config.actions || []), ...(state.actions || [])],
           discoveredFrom: state.discoveredFrom || null,
           consoleMessages,
@@ -132,11 +138,12 @@ async function main() {
           entry.actionArtifacts = await runActions(page, [...(config.actions || []), ...(state.actions || [])], {
             timeout: args.timeout,
             screenshotDir,
+            artifactPathBase: outDir,
             stateName,
             viewport,
           });
           await page.screenshot({ path: screenshotPath, fullPage: Boolean(config.fullPage ?? true) });
-          results.screenshots.push(screenshotPath);
+          results.screenshots.push(screenshotArtifactPath);
           entry.title = await page.title();
           entry.finalUrl = page.url();
           entry.ok = pageErrors.length === 0 && consoleErrors.length === 0;

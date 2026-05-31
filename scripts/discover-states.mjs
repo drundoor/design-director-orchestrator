@@ -2,10 +2,11 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { runActions } from "./lib/actions.mjs";
 import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, slug, writeJson } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
-  const args = { out: ".design-director", timeout: 15000, maxCandidates: 80, viewportMode: "smallest-largest", routesMode: "all" };
+  const args = { out: ".design-director", timeout: 15000, maxCandidates: 80, viewportMode: "smallest-largest", routesMode: "all", depth: 1 };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -26,6 +27,8 @@ function parseArgs(argv) {
       args.viewportMode = argv[++i];
     } else if (arg === "--routes") {
       args.routesMode = argv[++i];
+    } else if (arg === "--depth") {
+      args.depth = Number(argv[++i]);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -34,7 +37,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: discover-states.mjs --url <url> [--config .design-director/render.config.json] [--out .design-director] [--viewport-mode smallest-largest|all|largest] [--routes all|first]
+  return `Usage: discover-states.mjs --url <url> [--config .design-director/render.config.json] [--out .design-director] [--viewport-mode smallest-largest|all|largest] [--routes all|first] [--depth 1|2]
 
 Scans a rendered web page and emits:
 - discovered-states.json: interactive candidates with confidence and mutation risk.
@@ -68,6 +71,67 @@ function selectStates(config, routesMode) {
   throw new Error(`Unknown routes mode: ${routesMode}`);
 }
 
+async function discoverNestedCandidates({ browser, baseUrl, config, targetState, viewport, parent, timeout, maxCandidates }) {
+  const page = await browser.newPage({ viewport });
+  const targetUrl = resolveTarget(baseUrl, targetState);
+  try {
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout });
+    await preparePage(page, config, targetState, timeout);
+    await runActions(page, [parent.action, ...(parent.postActions || []), { type: "waitForStableLayout", ms: 150 }], { timeout, viewport });
+    return await page.evaluate((maxNested) => {
+      const visible = (el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0.01;
+      };
+      const cssEscape = (value) => window.CSS?.escape ? CSS.escape(value) : String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+      const selectorFor = (el) => {
+        if (el.id) return `#${cssEscape(el.id)}`;
+        const label = el.getAttribute("aria-label") || el.getAttribute("name") || el.getAttribute("placeholder");
+        if (label) return `${el.tagName.toLowerCase()}[${el.getAttribute("aria-label") ? "aria-label" : el.getAttribute("name") ? "name" : "placeholder"}="${label.replace(/"/g, '\\"')}"]`;
+        const siblings = [...(el.parentElement?.children || [])].filter((child) => child.tagName === el.tagName);
+        const nth = siblings.length > 1 ? `:nth-of-type(${siblings.indexOf(el) + 1})` : "";
+        return `${el.tagName.toLowerCase()}${nth}`;
+      };
+      const labelFor = (el) => (el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.getAttribute("title") || el.innerText || el.textContent || el.id || el.tagName.toLowerCase()).trim().replace(/\s+/g, " ");
+      const candidates = [];
+      const add = (candidate) => {
+        if (!candidate.selector || candidates.some((item) => item.selector === candidate.selector && item.kind === candidate.kind)) return;
+        candidates.push(candidate);
+      };
+      const controls = [...document.querySelectorAll("input, textarea, select, button, [role='combobox'], [role='searchbox'], [role='tab'], [aria-expanded='false'], [aria-controls]")].filter(visible);
+      for (const el of controls) {
+        const tag = el.tagName.toLowerCase();
+        const role = el.getAttribute("role") || "";
+        const selector = selectorFor(el);
+        const label = labelFor(el).slice(0, 120);
+        const rect = el.getBoundingClientRect();
+        const base = {
+          selector,
+          label,
+          tag,
+          role: role || null,
+          rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+          mutationRisk: "safe",
+          confidence: tag === "select" || role === "tab" ? "high" : "medium",
+          depth: 2,
+        };
+        if (tag === "select") {
+          const option = [...el.options].find((item) => !item.disabled && item.value !== el.value) || [...el.options].find((item) => !item.disabled);
+          if (option) add({ ...base, kind: "select", action: { type: "select", selector, value: option.value } });
+        } else if (tag === "input" || tag === "textarea" || role === "combobox" || role === "searchbox") {
+          add({ ...base, kind: role === "combobox" ? "combobox" : "text-input", action: { type: "fill", selector, value: /(search|filter|find|query)/i.test(label) ? "sample" : "test" } });
+        } else if (role === "tab" || tag === "button" || el.hasAttribute("aria-controls")) {
+          add({ ...base, kind: role === "tab" ? "tab" : "safe-button", action: { type: "click", selector } });
+        }
+      }
+      return candidates.slice(0, maxNested);
+    }, Math.min(20, maxCandidates));
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -93,6 +157,7 @@ async function main() {
     baseUrl,
     viewportMode: args.viewportMode,
     routesMode: args.routesMode,
+    depth: args.depth,
     targets: targetStates.map((state) => ({
       state: state.name || "default",
       url: resolveTarget(baseUrl, state),
@@ -270,7 +335,6 @@ async function main() {
         }
         results.scans.push(scan);
         for (const candidate of scan.candidates) {
-          if (results.candidates.length >= args.maxCandidates) break;
           results.candidates.push({
             ...candidate,
             discoveredFrom: {
@@ -279,6 +343,31 @@ async function main() {
               viewport: scan.viewport,
             },
           });
+        }
+        if (args.depth >= 2) {
+          const parents = scan.candidates
+            .filter((candidate) => candidate.kind === "overlay-trigger" && candidate.confidence === "high" && candidate.mutationRisk === "safe" && candidate.action)
+            .slice(0, 8);
+          for (const parent of parents) {
+            try {
+              const nested = await discoverNestedCandidates({ browser, baseUrl, config, targetState, viewport, parent, timeout: args.timeout, maxCandidates: args.maxCandidates });
+              for (const candidate of nested) {
+                results.candidates.push({
+                  ...candidate,
+                  preActions: [parent.action, ...(parent.postActions || [])],
+                  parent: { kind: parent.kind, selector: parent.selector, label: parent.label },
+                  discoveredFrom: {
+                    state: scan.state,
+                    url: scan.url,
+                    viewport: scan.viewport,
+                    depth: 2,
+                  },
+                });
+              }
+            } catch (error) {
+              scan.depth2Error = error.message;
+            }
+          }
         }
       }
     }
@@ -294,6 +383,7 @@ async function main() {
       const state = {
         name: candidateStateName(candidate.kind, candidate.label, index),
         actions: [
+          ...(candidate.preActions || []),
           candidate.action,
           ...(candidate.postActions || []),
           { type: "waitForStableLayout", ms: 200 },
@@ -304,7 +394,10 @@ async function main() {
           confidence: candidate.confidence,
           labelConfidence: candidate.labelConfidence,
           state: candidate.discoveredFrom?.state,
+          url: candidate.discoveredFrom?.url,
           viewport: candidate.discoveredFrom?.viewport,
+          depth: candidate.discoveredFrom?.depth || 1,
+          parent: candidate.parent || null,
         },
       };
       if (sourceState.path) state.path = sourceState.path;

@@ -111,3 +111,13 @@ export async function preparePage(page, config, state, timeout) {
 export function stateNameFor(state = {}) {
   return state.name || slug(state.path || state.url || "default");
 }
+
+export function stateIdFor(state = {}, index = 0) {
+  return state.id || state.stateId || slug(stateNameFor(state) || `state-${index + 1}`);
+}
+
+export function relativeArtifactPath(baseDir, file) {
+  if (!file) return file;
+  const absolute = path.isAbsolute(file) ? file : path.resolve(file);
+  return path.relative(baseDir, absolute).replaceAll(path.sep, "/");
+}

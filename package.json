@@ -13,6 +13,9 @@
     "visual-audit": "node scripts/visual-consistency-audit.mjs",
     "qa-report": "node scripts/qa-report.mjs",
     "native-qa-report": "node scripts/native-qa-report.mjs",
+    "smoke:web": "node scripts/smoke-web.mjs",
+    "smoke:native": "node scripts/smoke-native.mjs",
+    "smoke:native:fail": "node scripts/smoke-native-fail.mjs",
     "install:codex": "node scripts/install-local.mjs"
   },
   "devDependencies": {

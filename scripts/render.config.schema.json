@@ -18,6 +18,16 @@
     "waitForSelector": { "type": "string", "minLength": 1 },
     "waitMs": { "type": "number", "minimum": 0 },
     "fullPage": { "type": "boolean" },
+    "visualAudit": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "componentSelectors": { "$ref": "#/$defs/selectorList" },
+        "peerValueSelectors": { "$ref": "#/$defs/selectorList" },
+        "overlaySelectors": { "$ref": "#/$defs/selectorList" },
+        "ignoreSelectors": { "$ref": "#/$defs/selectorList" }
+      }
+    },
     "viewports": {
       "type": "array",
       "minItems": 1,
@@ -53,6 +63,8 @@
       "additionalProperties": true,
       "properties": {
         "name": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 },
+        "stateId": { "type": "string", "minLength": 1 },
         "path": { "type": "string" },
         "url": { "type": "string" },
         "waitForSelector": { "type": "string", "minLength": 1 },
@@ -61,7 +73,22 @@
           "type": "array",
           "items": { "$ref": "#/$defs/action" }
         },
-        "discoveredFrom": { "type": "object" }
+        "discoveredFrom": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": { "type": "string" },
+            "selector": { "type": "string" },
+            "state": { "type": "string" },
+            "url": { "type": "string" },
+            "viewport": {
+              "oneOf": [
+                { "type": "string" },
+                { "$ref": "#/$defs/viewport" }
+              ]
+            }
+          }
+        }
       }
     },
     "action": {
@@ -223,6 +250,10 @@
         "x": { "type": "number" },
         "y": { "type": "number" }
       }
+    },
+    "selectorList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
     },
     "waiver": {
       "type": "object",

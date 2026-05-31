@@ -57,7 +57,7 @@ Rendered QA must exercise the interface the way a user will use it. Static defau
 - Before acceptance, configure and inspect active states for every relevant interactive surface: search suggestions, dropdowns, comboboxes, filter pickers, popovers, dialogs, menus, details/accordions, tabs, chart controls, hover/focus states, mobile navigation, and form validation.
 - Open overlays and menus in both mobile and desktop viewports when they exist. Verify they are visible, usable, above neighboring containers/charts/tables, not clipped, and reachable by keyboard/touch as applicable.
 - Run state discovery or explicitly waive it before final QA when a rendered web surface exists. A manually named default state is not enough for interfaces with controls, overlays, charts, forms, tabs, filters, or nested scroll.
-- Final QA must produce `design-qa.json` with `status: "pass"`. `status: "incomplete"` means evidence is missing or uninspected and is not acceptable for shipping.
+- Final acceptance means `design-qa.json` has `status: "pass"` and `acceptanceReady: true`. `status: "incomplete"` means evidence is missing or uninspected and is not acceptable for shipping.
 
 Load focused references only when relevant:
 
@@ -85,7 +85,7 @@ Do not admit a reference just because it looks good. A result that could be mist
 
 ## Blocking Failure Rule
 
-Do not call design work accepted if any relevant blocker remains unwaived:
+Do not call design work accepted if any relevant blocker remains unwaived. Core blockers include:
 
 - Console error or framework overlay.
 - Mobile horizontal page overflow.
@@ -96,8 +96,8 @@ Do not call design work accepted if any relevant blocker remains unwaived:
 - Chart/data display contradicts source data.
 - Required caveat/source label is absent.
 - Screenshots, active states, or state discovery were generated/skipped without inspection notes or waiver.
-- Repeated same-role values, labels, slots, columns, media/title groups, or attached controls visibly drift without a named hierarchy reason.
-- An interactive control is visually camouflaged against its surrounding surface.
+- Untested active states or uninspected generated screenshots.
+- Visual consistency failures that contradict the intended hierarchy, including visibly camouflaged controls.
 
 Use `references/validation-contract.md` and `references/severity-policy.md` for the full acceptance contract.
 

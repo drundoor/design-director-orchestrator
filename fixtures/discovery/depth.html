@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Depth Discovery Fixture</title>
+    <style>
+      #drawer[hidden] { display: none; }
+      #drawer {
+        position: fixed;
+        inset: 0 0 0 auto;
+        width: 280px;
+        padding: 16px;
+        background: white;
+        border-left: 1px solid #cfd8d3;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <button id="filtersButton" type="button" aria-controls="drawer" aria-expanded="false">Filters</button>
+      <aside id="drawer" hidden>
+        <label for="drawerSearch">Search filters</label>
+        <input id="drawerSearch" type="search" placeholder="Search filters">
+      </aside>
+    </main>
+    <script>
+      document.getElementById("filtersButton").addEventListener("click", (event) => {
+        event.currentTarget.setAttribute("aria-expanded", "true");
+        document.getElementById("drawer").hidden = false;
+      });
+    </script>
+  </body>
+</html>

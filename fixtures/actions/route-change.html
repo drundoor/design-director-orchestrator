@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Route Change Fixture</title>
+  </head>
+  <body>
+    <main>
+      <button id="routeButton" type="button">Open details</button>
+      <section id="panel">Default route</section>
+    </main>
+    <script>
+      document.getElementById("routeButton").addEventListener("click", () => {
+        history.pushState({}, "", "?view=details");
+        document.getElementById("panel").textContent = "Details route";
+      });
+    </script>
+  </body>
+</html>

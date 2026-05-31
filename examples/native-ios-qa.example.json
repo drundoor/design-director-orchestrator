@@ -19,6 +19,7 @@
   "matrix": [
     {
       "state": "home",
+      "profile": "default-light",
       "appearance": "light",
       "contentSize": "default",
       "orientation": "portrait",
@@ -28,12 +29,14 @@
     },
     {
       "state": "form-focused",
+      "profiles": ["dark", "large-text", "keyboard-focused"],
       "appearance": "dark",
       "contentSize": "accessibilityLarge",
       "orientation": "portrait",
+      "keyboard": true,
       "screenshot": ".design-director/ios-form-dark-large.png",
       "uiHierarchy": ".design-director/ios-form-dark-large-hierarchy.json",
-      "result": "needs-review"
+      "result": "pass"
     }
   ],
   "checks": {

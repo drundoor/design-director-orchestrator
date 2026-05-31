@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = {
@@ -82,9 +82,11 @@ async function main() {
   const baseUrl = args.url || config.url;
   if (!baseUrl) throw new Error("Missing --url or config.url");
 
+  const visualAuditConfig = config.visualAudit || {};
   const states = config.states?.length ? config.states : [{ name: "default" }];
   const viewports = parseViewports(args.viewports) || config.viewports || DEFAULT_VIEWPORTS;
   const outDir = path.resolve(args.out);
+  const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(outDir, { recursive: true });
 
   const { chromium } = await loadPlaywright();
@@ -106,14 +108,18 @@ async function main() {
   };
 
   try {
-    for (const state of states) {
+    for (const [stateIndex, state] of states.entries()) {
       for (const viewport of viewports) {
         const page = await browser.newPage({ viewport });
         const targetUrl = resolveTarget(baseUrl, state);
+        const stateName = stateNameFor(state);
         const entry = {
-          state: state.name || "default",
+          state: stateName,
+          stateId: stateIdFor(state, stateIndex),
           url: targetUrl,
           viewport,
+          actions: [...(config.actions || []), ...(state.actions || [])],
+          discoveredFrom: state.discoveredFrom || null,
           ok: false,
         };
         try {
@@ -121,11 +127,14 @@ async function main() {
           await preparePage(page, config, state, args.timeout);
           entry.actionArtifacts = await runActions(page, [...(config.actions || []), ...(state.actions || [])], {
             timeout: args.timeout,
+            screenshotDir,
+            artifactPathBase: outDir,
             stateName: entry.state,
             viewport,
           });
+          entry.finalUrl = page.url();
           entry.audit = await page.evaluate(
-            ({ fontDeltaPx, alignDeltaPx, widthDeltaPx, gapRatio, maxFindings, maxElements, maxContainers }) => {
+            ({ fontDeltaPx, alignDeltaPx, widthDeltaPx, gapRatio, maxFindings, maxElements, maxContainers, visualAudit }) => {
               const BLOCKER_LIMIT = maxFindings;
               const WARNING_LIMIT = maxFindings;
               const textTokenRe = /(value|metric|score|rank|rating|count|stat|number|amount|price|total|player|complexity|key)/i;
@@ -136,6 +145,25 @@ async function main() {
               const blockers = [];
               const warnings = [];
               const seen = new Set();
+              const selectorList = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
+              const ignoreSelectors = selectorList(visualAudit.ignoreSelectors);
+              const componentSelectors = selectorList(visualAudit.componentSelectors);
+              const peerValueSelectors = selectorList(visualAudit.peerValueSelectors);
+              const overlaySelectors = selectorList(visualAudit.overlaySelectors);
+              const matchesAny = (el, selectors) => selectors.some((selector) => {
+                try {
+                  return el.matches(selector);
+                } catch {
+                  return false;
+                }
+              });
+              const closestAny = (el, selectors) => selectors.some((selector) => {
+                try {
+                  return Boolean(el.closest(selector));
+                } catch {
+                  return false;
+                }
+              });
 
               const addFinding = (bucket, finding) => {
                 const key = `${finding.type}|${finding.selector}|${finding.message}`;
@@ -210,11 +238,11 @@ async function main() {
                 const rect = el.getBoundingClientRect();
                 return rect.bottom >= -200 && rect.top <= window.innerHeight + 400 && rect.right >= -200 && rect.left <= window.innerWidth + 200;
               };
-              const rawAll = [...document.querySelectorAll("body *")].filter(visible);
+              const rawAll = [...document.querySelectorAll("body *")].filter((el) => visible(el) && !matchesAny(el, ignoreSelectors) && !closestAny(el, ignoreSelectors));
               const all = rawAll.filter(nearViewport).slice(0, maxElements);
               const textLeaves = all.filter((el) => {
                 const text = directTextFor(el);
-                if (!text) return false;
+                if (!text && !matchesAny(el, peerValueSelectors)) return false;
                 const rect = el.getBoundingClientRect();
                 return rect.width > 0 && rect.height > 0;
               });
@@ -223,7 +251,7 @@ async function main() {
                 const rect = el.getBoundingClientRect();
                 if (rect.width < 120 || rect.height < 40) return false;
                 const signature = `${classText(el)} ${el.tagName}`.toLowerCase();
-                if (!componentTokenRe.test(signature) && !["ARTICLE", "LI", "TR", "SECTION", "DETAILS"].includes(el.tagName)) return false;
+                if (!matchesAny(el, componentSelectors) && !componentTokenRe.test(signature) && !["ARTICLE", "LI", "TR", "SECTION", "DETAILS"].includes(el.tagName)) return false;
                 const leaves = textLeaves.filter((leaf) => el !== leaf && el.contains(leaf));
                 return leaves.length >= 2 && leaves.length <= 60;
               }).slice(0, maxContainers);
@@ -504,12 +532,13 @@ async function main() {
                 const rect = el.getBoundingClientRect();
                 if (rect.width < 40 || rect.height < 24) return false;
                 if (el.matches("select, option")) return false;
+                if (matchesAny(el, overlaySelectors)) return true;
                 const role = el.getAttribute("role");
                 const label = `${classText(el)} ${el.id || ""} ${role || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase();
                 const style = getComputedStyle(el);
                 const explicitlyOpen = el.matches("[popover]:popover-open, [open], [data-state='open']") || /(^|\s)open(\s|$)/.test(label);
                 const overlayPosition = ["absolute", "fixed"].includes(style.position);
-                return overlayTokenRe.test(label) || ((overlayRoles.has(role) || explicitlyOpen) && overlayPosition);
+                return (overlayTokenRe.test(label) && (overlayPosition || explicitlyOpen)) || ((overlayRoles.has(role) || explicitlyOpen) && overlayPosition);
               });
 
               for (const overlay of overlayCandidates) {
@@ -594,9 +623,11 @@ async function main() {
               maxFindings: args.maxFindings,
               maxElements: args.maxElements,
               maxContainers: args.maxContainers,
+              visualAudit: visualAuditConfig,
             },
           );
           entry.ok = true;
+          entry.finalUrl = page.url();
         } catch (error) {
           entry.error = error.message;
         } finally {
