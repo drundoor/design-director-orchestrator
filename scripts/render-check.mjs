@@ -117,6 +117,8 @@ async function main() {
           url: targetUrl,
           viewport,
           screenshot: screenshotPath,
+          actions: [...(config.actions || []), ...(state.actions || [])],
+          discoveredFrom: state.discoveredFrom || null,
           consoleMessages,
           consoleErrors,
           consoleWarnings,

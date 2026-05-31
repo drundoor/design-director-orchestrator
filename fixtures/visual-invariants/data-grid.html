@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Data Grid Fixture</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+      }
+      [role="grid"] {
+        display: grid;
+        grid-template-columns: 140px 120px 120px;
+        border: 1px solid #b7c5bd;
+        max-width: 380px;
+      }
+      [role="columnheader"],
+      [role="gridcell"] {
+        padding: 10px;
+        border-right: 1px solid #d7e0db;
+        border-bottom: 1px solid #d7e0db;
+      }
+      [role="columnheader"] {
+        font-weight: 700;
+        background: #eef3ef;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section role="grid" aria-label="Scores table">
+        <div role="columnheader">Name</div>
+        <div role="columnheader">Score</div>
+        <div role="columnheader">Rank</div>
+        <div role="gridcell">Alpha</div>
+        <div role="gridcell">8.4</div>
+        <div role="gridcell">12</div>
+        <div role="gridcell">Beta</div>
+        <div role="gridcell">7.9</div>
+        <div role="gridcell">38</div>
+      </section>
+    </main>
+  </body>
+</html>

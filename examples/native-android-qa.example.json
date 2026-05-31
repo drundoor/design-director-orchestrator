@@ -46,6 +46,7 @@
     "reducedMotion": "not applicable",
     "logsReviewed": "checked"
   },
+  "logs": ".design-director/android-logcat-errors.txt",
   "blockers": [],
   "warnings": [],
   "waivers": []

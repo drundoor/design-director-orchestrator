@@ -36,6 +36,8 @@ adb logcat -d '*:E' > .design-director/logcat-errors.txt
 
 ## Report Shape
 
-Use `examples/native-android-qa.example.json` as the minimum structure. Missing
-emulator/device access is allowed only when the report names the missing tool
-and the fallback evidence used instead.
+Use `examples/native-android-qa.example.json` as the minimum structure and
+`schemas/native-android-qa.schema.json` when your editor or CI supports JSON
+Schema. Then run `scripts/native-qa-report.mjs --report <report> --out
+.design-director`. Missing screenshots, UI tree captures, logs, or tooling
+metadata are not acceptance evidence.

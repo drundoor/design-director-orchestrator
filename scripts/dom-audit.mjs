@@ -92,6 +92,11 @@ async function main() {
               "input",
               "select",
               "textarea",
+              "details",
+              "summary",
+              "[aria-expanded]",
+              "[aria-controls]",
+              "[popover]",
               "[role]",
               "[tabindex]:not([tabindex='-1'])",
               "[onclick]",
@@ -171,7 +176,26 @@ async function main() {
               .slice(0, 80)
               .map(preview);
 
-            return { overflow, clipped, tinyText, smallTargets, unlabeledFocusable, hoverOnlyCandidates };
+            const staticControlSelector = [
+              "button",
+              "input",
+              "select",
+              "textarea",
+              "details",
+              "summary",
+              "[role='button']",
+              "[role='combobox']",
+              "[aria-expanded]",
+              "[aria-controls]",
+              "[popover]",
+              "[onclick]",
+            ].join(",");
+            const interactiveControls = [...document.querySelectorAll(staticControlSelector)]
+              .filter(visible)
+              .slice(0, 120)
+              .map(preview);
+
+            return { overflow, clipped, tinyText, smallTargets, unlabeledFocusable, hoverOnlyCandidates, interactiveControls };
           }, { minTextPx: args.minTextPx, minTargetPx: args.minTargetPx });
           entry.ok = true;
         } catch (error) {

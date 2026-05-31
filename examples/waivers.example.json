@@ -2,7 +2,8 @@
   {
     "check": "state-discovery",
     "reason": "Static page with no controls, forms, chart interactions, mobile navigation, or overlays.",
-    "evidence": ".design-director/screenshots/default-1440x1000.png",
-    "owner": "design QA"
+    "evidence": "screenshots/default-1440x1000.png",
+    "owner": "design QA",
+    "expires": "2999-01-01"
   }
 ]

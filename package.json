@@ -12,6 +12,7 @@
     "dom-audit": "node scripts/dom-audit.mjs",
     "visual-audit": "node scripts/visual-consistency-audit.mjs",
     "qa-report": "node scripts/qa-report.mjs",
+    "native-qa-report": "node scripts/native-qa-report.mjs",
     "install:codex": "node scripts/install-local.mjs"
   },
   "devDependencies": {

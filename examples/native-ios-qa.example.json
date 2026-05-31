@@ -46,6 +46,7 @@
     "reducedMotion": "not applicable",
     "logsReviewed": "checked"
   },
+  "logs": ".design-director/ios-runtime-errors.txt",
   "blockers": [],
   "warnings": [],
   "waivers": []

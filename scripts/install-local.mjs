@@ -5,6 +5,22 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const COPY_EXCLUDES = new Set([
+  ".git",
+  ".DS_Store",
+  "node_modules",
+  ".design-director",
+  "coverage",
+  "screenshots",
+  "playwright-report",
+  "test-results",
+  "tmp",
+  "temp",
+  "logs",
+  "dist",
+  "build",
+]);
+
 function parseArgs(argv) {
   const args = { mode: "symlink", name: "design-director" };
   for (let i = 0; i < argv.length; i += 1) {
@@ -94,7 +110,7 @@ async function main() {
       recursive: true,
       filter: (source) => {
         const base = path.basename(source);
-        return ![".git", "node_modules", ".DS_Store"].includes(base) && !base.startsWith(".codex-scratch-");
+        return !COPY_EXCLUDES.has(base) && !base.startsWith(".codex-scratch-") && !base.endsWith(".log");
       },
     });
   } else {

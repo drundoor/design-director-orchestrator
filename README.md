@@ -21,8 +21,10 @@ Design Director is a Codex skill for governing UI design work that needs more th
 - `scripts/dom-audit.mjs`: DOM-level audit for overflow, clipping, text size, tap targets, labels, and hover-only candidates.
 - `scripts/visual-consistency-audit.mjs`: visual consistency and overlay stacking audit.
 - `scripts/discover-states.mjs`: active-state discovery for controls, overlays, scroll containers, charts, canvas/SVG, and form surfaces.
-- `scripts/qa-report.mjs`: merges audit artifacts into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
+- `scripts/qa-report.mjs`: merges web audit artifacts into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
+- `scripts/native-qa-report.mjs`: validates native iOS/Android QA reports and evidence files.
 - `scripts/lib/`: shared Playwright/browser/action/finding helpers.
+- `schemas/`: JSON Schemas for native QA reports; the web render config schema lives at `scripts/render.config.schema.json`.
 - `fixtures/`: generic paired good/bad fixtures for audit regression checks.
 - `examples/`: reusable example configs and QA note templates.
 - `references/native-ios-qa.md` and `references/native-android-qa.md`: operational report contracts for native app QA.
@@ -49,12 +51,6 @@ mkdir -p ~/.codex/skills
 ln -s "$(pwd)" ~/.codex/skills/design-director
 ```
 
-If you prefer copying instead of symlinking:
-
-```sh
-cp -R . ~/.codex/skills/design-director
-```
-
 Or run the local installer from the cloned repo:
 
 ```sh
@@ -62,7 +58,13 @@ node scripts/install-local.mjs --dry-run --symlink
 node scripts/install-local.mjs --symlink
 ```
 
-Use `--copy` instead of `--symlink` if your environment does not support symlinks. Use `--name <skill-name>` for non-Codex skill directories or `--target <path>` for a custom install path. Use `--force` only when replacing an existing install is intended.
+Use `--copy` instead of `--symlink` if your environment does not support symlinks; the installer excludes `.git`, `node_modules`, local QA output, screenshots, reports, logs, and scratch files. Use `--name <skill-name>` for non-Codex skill directories or `--target <path>` for a custom install path. Use `--force` only when replacing an existing install is intended.
+
+If you must copy manually, avoid raw `cp -R .` because it can include generated reports or local scratch data. Prefer:
+
+```sh
+rsync -a --exclude='.git' --exclude='node_modules' --exclude='.design-director' --exclude='test-results' --exclude='playwright-report' --exclude='.codex-scratch-*' ./ ~/.codex/skills/design-director/
+```
 
 Expected verification output:
 
@@ -162,6 +164,14 @@ node ~/.codex/skills/design-director/scripts/qa-report.mjs \
 
 For non-interactive static pages, add `--static` to waive state discovery. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence.
 
+For native apps, collect the platform report and validate it:
+
+```sh
+node ~/.codex/skills/design-director/scripts/native-qa-report.mjs \
+  --report .design-director/native-ios-qa.json \
+  --out .design-director
+```
+
 ## Active State Config
 
 The QA scripts support state actions so the design pass can inspect UI while it is actually being used. This is required for interactive surfaces.
@@ -209,7 +219,7 @@ Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`
 
 Validate config shape with `scripts/render.config.schema.json` when your editor or CI supports JSON Schema.
 
-Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every waiver needs a check, reason, and evidence.
+Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every waiver needs a check, reason, evidence, owner, and expiry date.
 
 ## Reference Depth
 

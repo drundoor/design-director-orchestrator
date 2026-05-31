@@ -499,14 +499,17 @@ async function main() {
               // menus must sit above cards, charts, tables, and sticky chrome. This
               // catches low z-index and stacking-context failures once a state action
               // has opened the overlay.
-              const overlayRoles = new Set(["listbox", "menu", "dialog", "tooltip", "tree", "grid"]);
+              const overlayRoles = new Set(["listbox", "menu", "dialog", "tooltip"]);
               const overlayCandidates = all.filter((el) => {
                 const rect = el.getBoundingClientRect();
                 if (rect.width < 40 || rect.height < 24) return false;
                 if (el.matches("select, option")) return false;
                 const role = el.getAttribute("role");
                 const label = `${classText(el)} ${el.id || ""} ${role || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase();
-                return overlayRoles.has(role) || overlayTokenRe.test(label);
+                const style = getComputedStyle(el);
+                const explicitlyOpen = el.matches("[popover]:popover-open, [open], [data-state='open']") || /(^|\s)open(\s|$)/.test(label);
+                const overlayPosition = ["absolute", "fixed"].includes(style.position);
+                return overlayTokenRe.test(label) || ((overlayRoles.has(role) || explicitlyOpen) && overlayPosition);
               });
 
               for (const overlay of overlayCandidates) {

@@ -35,6 +35,8 @@ xcrun simctl ui booted appearance dark
 
 ## Report Shape
 
-Use `examples/native-ios-qa.example.json` as the minimum structure. Missing
-tooling is allowed only when the report names the missing tool and the fallback
-evidence used instead.
+Use `examples/native-ios-qa.example.json` as the minimum structure and
+`schemas/native-ios-qa.schema.json` when your editor or CI supports JSON Schema.
+Then run `scripts/native-qa-report.mjs --report <report> --out .design-director`.
+Missing screenshots, UI hierarchy captures, logs, or tooling metadata are not
+acceptance evidence.
