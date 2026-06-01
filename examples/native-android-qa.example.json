@@ -51,6 +51,5 @@
   },
   "logs": ".design-director/android-logcat-errors.txt",
   "blockers": [],
-  "warnings": [],
-  "waivers": []
+  "warnings": []
 }

@@ -10,8 +10,9 @@ Rendered design work needs durable evidence. A build passing is not enough.
 - `.design-director/screenshots/` manifest
 
 The brief may be omitted only for a short routing answer.
-`design-qa.json.status` must be `pass` for acceptance. `incomplete` means
-evidence is missing or uninspected; `fail` means a blocker was found.
+`design-qa.json.status` must be `pass` and `acceptanceReady` must be `true`
+for acceptance. `incomplete` means evidence is missing or uninspected; `fail`
+means a blocker was found.
 
 ## Default Viewports
 
@@ -48,6 +49,7 @@ Use fewer only when the surface clearly does not need them, and record why.
   pass/fail, issues, and waiver/evidence fields filled in.
 - Focused-state screenshots for any component or section with recent user complaints, dense generated labels, popovers, overlays, charts, counters, markers, or small repeated controls. Full-page screenshots alone are not sufficient for those areas.
 - State discovery output or a recorded waiver. For rendered web targets, run `scripts/discover-states.mjs` before final QA unless the page is static or the user explicitly limited scope. Use `qa-report.mjs --static` only when the page has no relevant interactive states; use `--partial` only for draft reports, never acceptance.
+- State coverage dispositions for discovered but unrendered candidates. Non-rendered dispositions require a reason; `waived`, `duplicate`, and `low-value` also require evidence.
 - Visual consistency audit for repeated components: peer typography, slot alignment, local spacing rhythm, media/title anchoring, attached-control width, and affordance clarity.
 - Overlay stacking audit for open dropdown/listbox/popover states: sampled points inside the overlay must resolve to the overlay or its descendants with `elementFromPoint`, and the overlay must not be clipped by the viewport.
 - Interaction tool evidence: use the Browser plugin for local web targets, Chrome plugin for deployed/authenticated/profile-dependent pages or explicit Chrome requests, and Computer Use only when browser tools cannot exercise the surface. Record the tool and active states used in screenshot notes or QA notes.
@@ -82,7 +84,7 @@ Use fewer only when the surface clearly does not need them, and record why.
 
 A design pass is accepted only when:
 
-1. `.design-director/design-brief.md` exists or was updated.
+1. `.design-director/design-brief.md` exists or was updated, unless this is explicitly an `--evidence-only` validation run.
 2. The brief names source of truth, surface, owners, anti-goals, and acceptance gates.
 3. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
 4. Implementation changes map back to the brief.
@@ -92,4 +94,4 @@ A design pass is accepted only when:
 8. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
 9. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
 10. No blocker remains unwaived.
-11. Any waiver includes evidence and reason.
+11. Any waiver includes evidence and reason, and no valid waiver is stale or unused.

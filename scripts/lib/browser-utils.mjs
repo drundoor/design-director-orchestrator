@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 
 export const DEFAULT_VIEWPORTS = [
   { width: 320, height: 900 },
@@ -113,11 +114,17 @@ export function stateNameFor(state = {}) {
 }
 
 export function stateIdFor(state = {}, index = 0) {
-  return state.id || state.stateId || slug(stateNameFor(state) || `state-${index + 1}`);
+  if (state.id || state.stateId) return slug(state.id || state.stateId);
+  const base = slug(stateNameFor(state) || `state-${index + 1}`);
+  return index === 0 ? base : `${base}-${index + 1}`;
 }
 
 export function relativeArtifactPath(baseDir, file) {
   if (!file) return file;
   const absolute = path.isAbsolute(file) ? file : path.resolve(file);
   return path.relative(baseDir, absolute).replaceAll(path.sep, "/");
+}
+
+export function stableHash(value, length = 8) {
+  return createHash("sha256").update(String(value || "")).digest("hex").slice(0, length);
 }

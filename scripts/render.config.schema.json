@@ -25,7 +25,8 @@
         "componentSelectors": { "$ref": "#/$defs/selectorList" },
         "peerValueSelectors": { "$ref": "#/$defs/selectorList" },
         "overlaySelectors": { "$ref": "#/$defs/selectorList" },
-        "ignoreSelectors": { "$ref": "#/$defs/selectorList" }
+        "ignoreSelectors": { "$ref": "#/$defs/selectorList" },
+        "warningOnlySelectors": { "$ref": "#/$defs/selectorList" }
       }
     },
     "viewports": {

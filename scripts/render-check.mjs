@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000 };
@@ -114,12 +114,15 @@ async function main() {
         const targetUrl = resolveTarget(baseUrl, state);
         const stateName = stateNameFor(state);
         const stateId = stateIdFor(state, stateIndex);
-        const fileName = `${slug(stateName)}-${viewport.width}x${viewport.height}.png`;
+        const routeHash = stableHash(targetUrl);
+        const fileName = `${slug(stateId)}-${stateIndex + 1}-${routeHash}-${viewport.width}x${viewport.height}.png`;
         const screenshotPath = path.join(screenshotDir, fileName);
         const screenshotArtifactPath = relativeArtifactPath(outDir, screenshotPath);
         const entry = {
           state: stateName,
           stateId,
+          stateIndex,
+          routeHash,
           url: targetUrl,
           viewport,
           screenshot: screenshotArtifactPath,
@@ -139,7 +142,7 @@ async function main() {
             timeout: args.timeout,
             screenshotDir,
             artifactPathBase: outDir,
-            stateName,
+            stateName: stateId,
             viewport,
           });
           await page.screenshot({ path: screenshotPath, fullPage: Boolean(config.fullPage ?? true) });

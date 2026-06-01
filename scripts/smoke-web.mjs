@@ -30,6 +30,7 @@ async function main() {
     viewports: [{ width: 375, height: 700 }],
     states: [{ name: "default" }]
   });
+  await fs.writeFile(path.join(out, "design-brief.md"), "Source truth: static hierarchy smoke fixture.\nAnti-goals: no interactive controls.\nAcceptance: QA report passes.\n");
 
   await run(["scripts/render-check.mjs", "--config", configPath, "--out", out]);
   await run(["scripts/dom-audit.mjs", "--config", configPath, "--out", out]);

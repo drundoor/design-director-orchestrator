@@ -26,6 +26,12 @@ function parseArgs(argv) {
       args.notes = argv[++i];
     } else if (arg === "--waivers") {
       args.waivers = argv[++i];
+    } else if (arg === "--brief") {
+      args.brief = argv[++i];
+    } else if (arg === "--evidence-only") {
+      args.evidenceOnly = true;
+    } else if (arg === "--no-brief") {
+      args.noBrief = true;
     } else if (arg === "--init-notes") {
       args.initNotes = true;
     } else if (arg === "--static") {
@@ -42,11 +48,13 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero]
+  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--brief .design-director/design-brief.md] [--evidence-only|--no-brief] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero]
 
 Merges render-results.json, dom-audit.json, and visual-consistency-audit.json
 into design-qa.json and design-qa.md. Missing evidence is incomplete/failing by
 default. Use --static to waive state discovery for non-interactive static pages.
+Final design acceptance requires a design brief unless --evidence-only or --no-brief
+records that this run is only validating QA evidence.
 Use --partial only for draft reports that are not acceptance evidence. Partial
 reports with incomplete evidence exit nonzero unless --allow-partial-exit-zero
 is explicitly supplied.`;
@@ -147,6 +155,27 @@ function buildStateMatrix(states = []) {
   return matrix;
 }
 
+function duplicateStateKeys(states = []) {
+  const counts = new Map();
+  for (const state of states) {
+    const key = stateKey(state);
+    if (!counts.has(key)) counts.set(key, []);
+    counts.get(key).push(state);
+  }
+  return [...counts.entries()]
+    .filter(([, entries]) => entries.length > 1)
+    .map(([key, entries]) => ({
+      key,
+      states: entries.map((state) => ({
+        state: state.state || state.name || "default",
+        stateId: stateIdForArtifact(state),
+        viewport: state.viewport || null,
+        url: state.finalUrl || state.url || null,
+        screenshot: state.screenshot || null,
+      })),
+    }));
+}
+
 async function inspectScreenshot(file, outDir) {
   const absolute = resolveEvidencePath(outDir, file);
   if (!absolute) return { path: file, exists: false, valid: false, reason: "path missing" };
@@ -159,7 +188,6 @@ async function inspectScreenshot(file, outDir) {
     const valid = data.length > 16 && (isPng || isJpeg || isWebp);
     return {
       path: file,
-      absolutePath: absolute,
       exists: true,
       valid,
       size: data.length,
@@ -169,7 +197,7 @@ async function inspectScreenshot(file, outDir) {
       reason: valid ? null : "not a valid PNG, JPEG, or WebP screenshot",
     };
   } catch (error) {
-    if (error.code === "ENOENT") return { path: file, absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
+    if (error.code === "ENOENT") return { path: file, exists: false, valid: false, reason: "file is missing" };
     throw error;
   }
 }
@@ -268,7 +296,7 @@ function hasWaiver(waivers, check, context = {}) {
   });
 }
 
-function loadScreenshots(render) {
+function loadScreenshots(render, outDir) {
   const screenshots = [];
   const seen = new Set();
   const add = (item) => {
@@ -280,7 +308,7 @@ function loadScreenshots(render) {
   for (const state of render?.states || []) {
     if (state.screenshot) {
       add({
-        path: state.screenshot,
+        path: artifactPath(outDir, state.screenshot),
         type: "page",
         state: state.state || "unknown",
         viewport: state.viewport || null,
@@ -290,7 +318,7 @@ function loadScreenshots(render) {
     for (const artifact of state.actionArtifacts || []) {
       if (artifact.type === "element-screenshot" && artifact.path) {
         add({
-          path: artifact.path,
+          path: artifactPath(outDir, artifact.path),
           type: "element",
           selector: artifact.selector,
           state: state.state || "unknown",
@@ -304,7 +332,7 @@ function loadScreenshots(render) {
   for (const screenshot of render?.screenshots || []) {
     const state = (render?.states || []).find((entry) => entry.screenshot === screenshot);
     add({
-      path: screenshot,
+      path: artifactPath(outDir, screenshot),
       type: "page",
       state: state?.state || "unknown",
       viewport: state?.viewport || null,
@@ -315,8 +343,8 @@ function loadScreenshots(render) {
   return screenshots;
 }
 
-function screenshotNoteTemplate(render) {
-  const screenshots = loadScreenshots(render);
+function screenshotNoteTemplate(render, outDir) {
+  const screenshots = loadScreenshots(render, outDir);
   const rows = screenshots.length
     ? screenshots.map((screenshot) => {
         const viewport = screenshot.viewport ? `${screenshot.viewport.width}x${screenshot.viewport.height}` : "unknown";
@@ -481,8 +509,10 @@ function candidateScope(candidate = {}) {
 function candidateScopeMatches(candidate, item = {}) {
   const expected = candidateScope(candidate);
   const actual = item.discoveredFrom || item.scope || item;
-  if (candidate.selector && item.selector !== candidate.selector) return false;
-  if (candidate.kind && item.kind !== candidate.kind) return false;
+  const actualSelector = item.selector || actual.selector;
+  const actualKind = item.kind || actual.kind;
+  if (candidate.selector && actualSelector !== candidate.selector) return false;
+  if (candidate.kind && actualKind !== candidate.kind) return false;
   if (expected.state && actual.state && actual.state !== expected.state) return false;
   if (expected.url !== "unknown-url" && actual.url && normalizeUrl(actual.url) !== expected.url) return false;
   const actualViewport = typeof actual.viewport === "string" ? actual.viewport : viewportKey(actual.viewport);
@@ -498,7 +528,61 @@ function dispositionForCandidate(candidate, stateCoverage) {
   });
 }
 
+function dispositionValue(item = {}) {
+  return item.disposition || item.coverage;
+}
+
+async function dispositionProblems(candidate, disposition, { outDir, rendered }) {
+  if (!disposition) return [];
+  const value = dispositionValue(disposition);
+  const problems = [];
+  const reason = String(disposition.reason || "").trim();
+  const evidence = disposition.evidence;
+  if (value && value !== "rendered" && !reason) {
+    problems.push(`state-coverage ${value} disposition for ${candidate.kind} ${candidate.selector} requires a reason`);
+  }
+  if (["waived", "duplicate", "low-value"].includes(value) && !evidence) {
+    problems.push(`state-coverage ${value} disposition for ${candidate.kind} ${candidate.selector} requires evidence`);
+  }
+  if (value === "rejected") {
+    const rejectionRisk = disposition.risk || disposition.rejectionRisk;
+    const acceptableRisk = ["destructive", "sensitive", "not-relevant"].includes(rejectionRisk);
+    if (!evidence && !acceptableRisk) {
+      problems.push(`state-coverage rejected disposition for ${candidate.kind} ${candidate.selector} requires evidence or risk destructive|sensitive|not-relevant`);
+    }
+  }
+  if (value === "rendered" && !rendered && !evidence) {
+    problems.push(`state-coverage rendered disposition for ${candidate.kind} ${candidate.selector} requires evidence when no rendered state/action proves it`);
+  }
+  if (evidence && !(await pathExists(resolveEvidencePath(outDir, evidence)))) {
+    problems.push(`state-coverage evidence does not exist for ${candidate.kind} ${candidate.selector}: ${evidence}`);
+  }
+  return problems;
+}
+
 const IMPORTANT_MEDIUM_KINDS = new Set(["chart-or-canvas", "scroll-container", "combobox", "text-input"]);
+const COVERAGE_KIND_PRIORITY = new Map([
+  ["overlay-trigger", 0],
+  ["select", 1],
+  ["combobox", 2],
+  ["text-input", 3],
+  ["chart-or-canvas", 4],
+  ["scroll-container", 5],
+  ["tab", 6],
+  ["disclosure", 7],
+  ["safe-button", 8],
+]);
+const COVERAGE_KIND_LIMITS = new Map([
+  ["overlay-trigger", 8],
+  ["select", 6],
+  ["combobox", 5],
+  ["text-input", 5],
+  ["chart-or-canvas", 5],
+  ["scroll-container", 4],
+  ["tab", 6],
+  ["disclosure", 5],
+  ["safe-button", 5],
+]);
 
 function enforceMediumCandidates(render = {}) {
   const qaProfile = render.qaProfile || "audit";
@@ -506,13 +590,43 @@ function enforceMediumCandidates(render = {}) {
   return qaProfile === "final-qa" || /\b(data-viz|dashboard|analytics|table|catalog)\b/.test(surface);
 }
 
+function prioritizeCoverageCandidates(candidates) {
+  const counts = new Map();
+  const sorted = [...candidates].sort((a, b) => {
+    const left = COVERAGE_KIND_PRIORITY.has(a.kind) ? COVERAGE_KIND_PRIORITY.get(a.kind) : 99;
+    const right = COVERAGE_KIND_PRIORITY.has(b.kind) ? COVERAGE_KIND_PRIORITY.get(b.kind) : 99;
+    if (left !== right) return left - right;
+    const leftY = a.rect?.y ?? 99999;
+    const rightY = b.rect?.y ?? 99999;
+    if (leftY !== rightY) return leftY - rightY;
+    return String(a.selector || "").localeCompare(String(b.selector || ""));
+  });
+  const selected = [];
+  for (const candidate of sorted) {
+    const viewport = candidate.discoveredFrom?.viewport;
+    const bucket = [
+      candidate.kind,
+      candidate.discoveredFrom?.state || "default",
+      candidate.discoveredFrom?.url || "unknown-url",
+      viewport ? `${viewport.width}x${viewport.height}` : "unknown-viewport",
+    ].join("|");
+    const limit = COVERAGE_KIND_LIMITS.get(candidate.kind) || 3;
+    const count = counts.get(bucket) || 0;
+    if (count >= limit) continue;
+    counts.set(bucket, count + 1);
+    selected.push(candidate);
+  }
+  return selected;
+}
+
 function enforcedCandidates(discovery, render = {}) {
   const includeMedium = enforceMediumCandidates(render);
-  return (discovery?.candidates || []).filter((candidate) => {
+  const candidates = (discovery?.candidates || []).filter((candidate) => {
     if (!candidate.selector || (candidate.mutationRisk || "safe") !== "safe") return false;
     if (candidate.confidence === "high") return true;
     return includeMedium && candidate.confidence === "medium" && IMPORTANT_MEDIUM_KINDS.has(candidate.kind);
   });
+  return prioritizeCoverageCandidates(candidates);
 }
 
 function renderedCandidate(candidate, states = []) {
@@ -540,6 +654,33 @@ function staticControlsFromDom(dom) {
   );
 }
 
+function sanitizeStringForOutput(value, outDir) {
+  if (typeof value !== "string") return value;
+  const normalizedOut = path.resolve(outDir);
+  if (value.includes(normalizedOut)) {
+    return value.split(normalizedOut).join(".");
+  }
+  if (path.isAbsolute(value)) {
+    const relative = path.relative(outDir, value);
+    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative.replaceAll(path.sep, "/");
+    return "[absolute-path-redacted]";
+  }
+  return value;
+}
+
+function sanitizeForOutput(value, outDir) {
+  if (Array.isArray(value)) return value.map((item) => sanitizeForOutput(item, outDir));
+  if (value && typeof value === "object") {
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "absolutePath" || key === "_absolutePath") continue;
+      result[key] = sanitizeForOutput(item, outDir);
+    }
+    return result;
+  }
+  return sanitizeStringForOutput(value, outDir);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -564,11 +705,13 @@ async function main() {
   const dom = domArtifact.data || { states: [] };
   const visual = visualArtifact.data || { states: [] };
   const notesPath = args.notes || path.join(outDir, "screenshot-notes.md");
+  const briefPath = args.brief || path.join(outDir, "design-brief.md");
 
-  if (args.initNotes && loadScreenshots(render).length && !(await pathExists(notesPath))) {
-    await fs.writeFile(notesPath, screenshotNoteTemplate(render));
+  if (args.initNotes && loadScreenshots(render, outDir).length && !(await pathExists(notesPath))) {
+    await fs.writeFile(notesPath, screenshotNoteTemplate(render, outDir));
   }
   const notesArtifact = await readTextArtifact(notesPath);
+  const briefArtifact = await readTextArtifact(briefPath);
 
   const blockers = [];
   const warnings = [];
@@ -607,6 +750,12 @@ async function main() {
     incomplete.push(`waiver ${invalidWaiver.index + 1} is invalid: ${invalidWaiver.problems.join("; ")}`);
   }
 
+  if (args.evidenceOnly || args.noBrief) {
+    warnings.push("design brief requirement skipped because --evidence-only or --no-brief was supplied; this report validates QA evidence only");
+  } else if (!briefArtifact.exists || !briefArtifact.text.trim()) {
+    addIncomplete("design-brief.md is missing or empty; final design acceptance requires source truth, anti-goals, and acceptance notes", "design-brief");
+  }
+
   for (const artifact of [
     ["render-results", renderArtifact],
     ["dom-audit", domArtifact],
@@ -623,6 +772,12 @@ async function main() {
   const renderMatrix = buildStateMatrix(render.states || []);
   const domMatrix = buildStateMatrix(dom.states || []);
   const visualMatrix = buildStateMatrix(visual.states || []);
+  const duplicateRenderKeys = duplicateStateKeys(render.states || []);
+  const duplicateDomKeys = duplicateStateKeys(dom.states || []);
+  const duplicateVisualKeys = duplicateStateKeys(visual.states || []);
+  for (const duplicate of duplicateRenderKeys) addIncomplete(`render-results.json has duplicate state matrix key ${duplicate.key}; set unique state.id values`, "coverage:duplicates");
+  for (const duplicate of duplicateDomKeys) addIncomplete(`dom-audit.json has duplicate state matrix key ${duplicate.key}; set unique state.id values`, "coverage:duplicates");
+  for (const duplicate of duplicateVisualKeys) addIncomplete(`visual-consistency-audit.json has duplicate state matrix key ${duplicate.key}; set unique state.id values`, "coverage:duplicates");
   coverage.stateMatrix.render = [...renderMatrix.keys()];
   coverage.stateMatrix.dom = [...domMatrix.keys()];
   coverage.stateMatrix.visual = [...visualMatrix.keys()];
@@ -659,12 +814,13 @@ async function main() {
     for (const candidate of enforcedCandidates(discoveryArtifact.data, render)) {
       const disposition = dispositionForCandidate(candidate, stateCoverageArtifact.data);
       const rendered = renderedCandidate(candidate, render.states || []);
-      const acceptableDisposition = disposition && ["rendered", "waived", "duplicate", "rejected", "low-value"].includes(disposition.disposition || disposition.coverage);
+      const acceptableDisposition = disposition && ["rendered", "waived", "duplicate", "rejected", "low-value"].includes(dispositionValue(disposition));
       if (!rendered && !acceptableDisposition) {
         coverage.unrenderedDiscoveredStates.push(candidate);
         addIncomplete(`discovered state ${candidate.kind} ${candidate.selector} at ${candidateScope(candidate).viewport} was not rendered, waived, or rejected in state-coverage.json with matching route and viewport`, "state-coverage", candidate);
-      } else if (disposition?.evidence && !(await pathExists(resolveEvidencePath(outDir, disposition.evidence)))) {
-        addIncomplete(`state-coverage evidence does not exist for ${candidate.kind} ${candidate.selector}: ${disposition.evidence}`, "state-coverage", candidate);
+      } else {
+        const problems = await dispositionProblems(candidate, disposition, { outDir, rendered });
+        for (const problem of problems) addIncomplete(problem, "state-coverage", candidate);
       }
     }
   }
@@ -704,7 +860,7 @@ async function main() {
     if (state.audit?.warnings?.length) warnings.push(`${label}: ${state.audit.warnings.length} visual consistency warning candidate(s)`);
   }
 
-  const screenshots = loadScreenshots(render);
+  const screenshots = loadScreenshots(render, outDir);
   if (!screenshots.length) {
     addIncomplete("no screenshots were produced by render-check.mjs", "screenshots");
   }
@@ -739,6 +895,11 @@ async function main() {
       stateDiscovery: { path: artifactPath(outDir, discoveryArtifact.path), exists: discoveryArtifact.exists, waived: Boolean(args.static || hasWaiver(waivers, "state-discovery")) },
       stateCoverage: { path: artifactPath(outDir, stateCoverageArtifact.path), exists: stateCoverageArtifact.exists, count: stateCoverageItems(stateCoverageArtifact.data).length },
       waivers: { path: artifactPath(outDir, waiversArtifact.path), exists: waiversArtifact.exists, count: rawWaivers.length, validCount: waivers.length, invalidCount: waiverValidation.invalid.length },
+      designBrief: {
+        path: artifactPath(outDir, briefPath),
+        exists: briefArtifact.exists,
+        waived: Boolean(args.evidenceOnly || args.noBrief),
+      },
     },
     coverage,
     screenshots: {
@@ -813,8 +974,10 @@ ${qa.stateDiscoveryPath ? `- State discovery: ${qa.stateDiscoveryPath}` : "- Sta
 - Waivers: ${waiversArtifact.exists ? waiversArtifact.path : "missing"}
 `;
 
-  await fs.writeFile(path.join(outDir, "design-qa.json"), `${JSON.stringify(qa, null, 2)}\n`);
-  await fs.writeFile(path.join(outDir, "design-qa.md"), md);
+  const publicQa = sanitizeForOutput(qa, outDir);
+  const publicMd = sanitizeStringForOutput(md, outDir);
+  await fs.writeFile(path.join(outDir, "design-qa.json"), `${JSON.stringify(publicQa, null, 2)}\n`);
+  await fs.writeFile(path.join(outDir, "design-qa.md"), publicMd);
   if (args.partial && incomplete.length) {
     console.warn(`qa-report: partial report has ${incomplete.length} incomplete evidence item(s); this is not acceptance evidence`);
   }

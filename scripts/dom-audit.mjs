@@ -72,9 +72,11 @@ async function main() {
         const page = await browser.newPage({ viewport });
         const targetUrl = resolveTarget(baseUrl, state);
         const stateName = stateNameFor(state);
+        const stateId = stateIdFor(state, stateIndex);
         const entry = {
           state: stateName,
-          stateId: stateIdFor(state, stateIndex),
+          stateId,
+          stateIndex,
           url: targetUrl,
           viewport,
           actions: [...(config.actions || []), ...(state.actions || [])],
@@ -88,7 +90,7 @@ async function main() {
             timeout: args.timeout,
             screenshotDir,
             artifactPathBase: outDir,
-            stateName: entry.state,
+            stateName: stateId,
             viewport,
           });
           entry.finalUrl = page.url();

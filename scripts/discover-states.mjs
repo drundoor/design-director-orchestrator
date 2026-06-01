@@ -52,6 +52,77 @@ function candidateStateName(kind, label, index) {
   return base || `${kind}-${index + 1}`;
 }
 
+const KIND_PRIORITY = new Map([
+  ["overlay-trigger", 0],
+  ["select", 1],
+  ["combobox", 2],
+  ["text-input", 3],
+  ["tooltip-trigger", 4],
+  ["chart-or-canvas", 5],
+  ["scroll-container", 6],
+  ["tab", 7],
+  ["disclosure", 8],
+  ["safe-button", 9],
+]);
+
+const DRAFT_KIND_LIMITS = new Map([
+  ["overlay-trigger", 5],
+  ["select", 4],
+  ["combobox", 4],
+  ["text-input", 4],
+  ["tooltip-trigger", 3],
+  ["chart-or-canvas", 4],
+  ["scroll-container", 3],
+  ["tab", 5],
+  ["disclosure", 4],
+  ["safe-button", 4],
+]);
+
+function candidateBucket(candidate) {
+  const viewport = candidate.discoveredFrom?.viewport;
+  return [
+    candidate.kind,
+    candidate.discoveredFrom?.state || "default",
+    candidate.discoveredFrom?.url || "unknown-url",
+    viewport ? `${viewport.width}x${viewport.height}` : "unknown-viewport",
+  ].join("|");
+}
+
+function candidatePriority(candidate) {
+  const kind = KIND_PRIORITY.has(candidate.kind) ? KIND_PRIORITY.get(candidate.kind) : 99;
+  const confidence = candidate.confidence === "high" ? 0 : candidate.confidence === "medium" ? 1 : 2;
+  const depth = candidate.depth || candidate.discoveredFrom?.depth || 1;
+  const y = candidate.rect?.y ?? 99999;
+  return [kind, confidence, depth, y];
+}
+
+function sortCandidates(candidates) {
+  return [...candidates].sort((a, b) => {
+    const left = candidatePriority(a);
+    const right = candidatePriority(b);
+    for (let i = 0; i < left.length; i += 1) {
+      if (left[i] !== right[i]) return left[i] - right[i];
+    }
+    return String(a.selector || "").localeCompare(String(b.selector || ""));
+  });
+}
+
+function draftCandidates(candidates, maxTotal) {
+  const counts = new Map();
+  const selected = [];
+  for (const candidate of sortCandidates(candidates)) {
+    if (candidate.mutationRisk !== "safe" || !candidate.action) continue;
+    const bucket = candidateBucket(candidate);
+    const limit = DRAFT_KIND_LIMITS.get(candidate.kind) || 2;
+    const count = counts.get(bucket) || 0;
+    if (count >= limit) continue;
+    counts.set(bucket, count + 1);
+    selected.push(candidate);
+    if (selected.length >= maxTotal) break;
+  }
+  return selected;
+}
+
 function selectViewports(viewports, mode) {
   const sorted = [...viewports].sort((a, b) => a.width - b.width || a.height - b.height);
   if (mode === "all") return sorted;
@@ -94,6 +165,16 @@ async function discoverNestedCandidates({ browser, baseUrl, config, targetState,
         return `${el.tagName.toLowerCase()}${nth}`;
       };
       const labelFor = (el) => (el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.getAttribute("title") || el.innerText || el.textContent || el.id || el.tagName.toLowerCase()).trim().replace(/\s+/g, " ");
+      const riskFor = (el, label) => {
+        const type = (el.getAttribute("type") || "").toLowerCase();
+        const text = `${label} ${el.id || ""} ${el.className || ""}`.toLowerCase();
+        if (el.closest("form") && /(submit|send|save|delete|remove|archive|purchase|checkout|pay|confirm|publish|post|upload)/.test(text)) return "destructive";
+        if (["submit", "file", "password"].includes(type)) return type === "submit" ? "destructive" : "sensitive";
+        if (/(delete|remove|archive|purchase|checkout|pay|confirm|publish|post|send|save)/.test(text)) return "destructive";
+        if (/(email|phone|address|password|token|secret|card|ssn)/.test(text)) return "sensitive";
+        return "safe";
+      };
+      const nestedButtonAllowlist = /(filter|sort|search|find|menu|more|details|expand|collapse|open|settings|options|tab|next|previous|prev)/i;
       const candidates = [];
       const add = (candidate) => {
         if (!candidate.selector || candidates.some((item) => item.selector === candidate.selector && item.kind === candidate.kind)) return;
@@ -105,6 +186,7 @@ async function discoverNestedCandidates({ browser, baseUrl, config, targetState,
         const role = el.getAttribute("role") || "";
         const selector = selectorFor(el);
         const label = labelFor(el).slice(0, 120);
+        const risk = riskFor(el, label);
         const rect = el.getBoundingClientRect();
         const base = {
           selector,
@@ -112,17 +194,17 @@ async function discoverNestedCandidates({ browser, baseUrl, config, targetState,
           tag,
           role: role || null,
           rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
-          mutationRisk: "safe",
           confidence: tag === "select" || role === "tab" ? "high" : "medium",
           depth: 2,
         };
         if (tag === "select") {
           const option = [...el.options].find((item) => !item.disabled && item.value !== el.value) || [...el.options].find((item) => !item.disabled);
-          if (option) add({ ...base, kind: "select", action: { type: "select", selector, value: option.value } });
+          if (option) add({ ...base, mutationRisk: risk, kind: "select", action: { type: "select", selector, value: option.value } });
         } else if (tag === "input" || tag === "textarea" || role === "combobox" || role === "searchbox") {
-          add({ ...base, kind: role === "combobox" ? "combobox" : "text-input", action: { type: "fill", selector, value: /(search|filter|find|query)/i.test(label) ? "sample" : "test" } });
+          add({ ...base, mutationRisk: risk, kind: role === "combobox" ? "combobox" : "text-input", action: { type: "fill", selector, value: /(search|filter|find|query)/i.test(label) ? "sample" : "test" } });
         } else if (role === "tab" || tag === "button" || el.hasAttribute("aria-controls")) {
-          add({ ...base, kind: role === "tab" ? "tab" : "safe-button", action: { type: "click", selector } });
+          const mutationRisk = role === "tab" ? risk : risk !== "safe" ? risk : nestedButtonAllowlist.test(label) ? "safe" : "review";
+          add({ ...base, mutationRisk, confidence: role === "tab" || mutationRisk === "safe" ? base.confidence : "low", kind: role === "tab" ? "tab" : "safe-button", action: { type: "click", selector } });
         }
       }
       return candidates.slice(0, maxNested);
@@ -278,7 +360,7 @@ async function main() {
               kind: "overlay-trigger",
               confidence: "high",
               action: { type: "click", selector },
-              postActions: controlledSelector ? [{ type: "waitForSelector", selector: controlledSelector, state: "visible", timeout: 1000 }] : [],
+              postActions: controlledSelector ? [{ type: "assertVisible", selector: controlledSelector, timeout: 1000 }] : [],
               followUp: "Verify overlay is topmost, not clipped, and keyboard/touch reachable.",
             });
           } else if (tag === "summary" || tag === "details") {
@@ -304,6 +386,26 @@ async function main() {
             mutationRisk: "safe",
             action: { type: "screenshotElement", selector: selectorFor(el) },
             followUp: "Verify data/labels, resize behavior, and tooltip/control states manually.",
+          });
+        });
+        [...document.querySelectorAll("[title], [aria-describedby], [data-tooltip], [data-tooltip-content]")].filter(visible).forEach((el) => {
+          const selector = selectorFor(el);
+          const label = labelFor(el).slice(0, 120);
+          add({
+            kind: "tooltip-trigger",
+            confidence: "medium",
+            selector,
+            label,
+            tag: el.tagName.toLowerCase(),
+            role: el.getAttribute("role") || null,
+            rect: (() => {
+              const rect = el.getBoundingClientRect();
+              return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+            })(),
+            mutationRisk: "safe",
+            action: { type: "hover", selector },
+            postActions: [{ type: "waitForStableLayout", ms: 150 }],
+            followUp: "Verify tooltip is visible, not clipped, and available through focus/touch alternatives.",
           });
         });
         [...document.querySelectorAll("body *")].filter(visible).forEach((el) => {
@@ -375,9 +477,8 @@ async function main() {
     await browser.close();
   }
 
-  const safeStates = results.candidates
-    .filter((candidate) => candidate.mutationRisk === "safe" && candidate.action)
-    .slice(0, 24)
+  results.candidates = sortCandidates(results.candidates);
+  const safeStates = draftCandidates(results.candidates, Math.min(24, args.maxCandidates))
     .map((candidate, index) => {
       const sourceState = targetStates.find((state) => (state.name || "default") === candidate.discoveredFrom?.state) || {};
       const state = {

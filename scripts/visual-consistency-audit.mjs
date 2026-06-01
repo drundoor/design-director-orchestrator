@@ -113,9 +113,11 @@ async function main() {
         const page = await browser.newPage({ viewport });
         const targetUrl = resolveTarget(baseUrl, state);
         const stateName = stateNameFor(state);
+        const stateId = stateIdFor(state, stateIndex);
         const entry = {
           state: stateName,
-          stateId: stateIdFor(state, stateIndex),
+          stateId,
+          stateIndex,
           url: targetUrl,
           viewport,
           actions: [...(config.actions || []), ...(state.actions || [])],
@@ -129,7 +131,7 @@ async function main() {
             timeout: args.timeout,
             screenshotDir,
             artifactPathBase: outDir,
-            stateName: entry.state,
+            stateName: stateId,
             viewport,
           });
           entry.finalUrl = page.url();
@@ -150,6 +152,7 @@ async function main() {
               const componentSelectors = selectorList(visualAudit.componentSelectors);
               const peerValueSelectors = selectorList(visualAudit.peerValueSelectors);
               const overlaySelectors = selectorList(visualAudit.overlaySelectors);
+              const warningOnlySelectors = selectorList(visualAudit.warningOnlySelectors);
               const matchesAny = (el, selectors) => selectors.some((selector) => {
                 try {
                   return el.matches(selector);
@@ -169,6 +172,14 @@ async function main() {
                 const key = `${finding.type}|${finding.selector}|${finding.message}`;
                 if (seen.has(key)) return;
                 seen.add(key);
+                if (bucket === "blocker" && warningOnlySelectors.length) {
+                  try {
+                    const el = document.querySelector(finding.selector);
+                    if (el && (matchesAny(el, warningOnlySelectors) || closestAny(el, warningOnlySelectors))) bucket = "warning";
+                  } catch {
+                    // Keep the original severity when the selector is not queryable.
+                  }
+                }
                 if (bucket === "blocker" && blockers.length < BLOCKER_LIMIT) blockers.push(finding);
                 if (bucket === "warning" && warnings.length < WARNING_LIMIT) warnings.push(finding);
               };

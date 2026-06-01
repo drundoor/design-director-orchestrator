@@ -41,3 +41,10 @@ Use `examples/native-android-qa.example.json` as the minimum structure and
 Schema. Then run `scripts/native-qa-report.mjs --report <report> --out
 .design-director`. Missing screenshots, UI tree captures, logs, or tooling
 metadata are not acceptance evidence.
+
+Required profile coverage is inferred from concrete metadata, not from
+`profile` or `profiles` labels alone. For standard QA, light, dark, large font
+scale, and IME-focused states must be backed by matching fields such as
+`theme`, `fontScale`, and `ime`. Use `notApplicableProfiles` only with a reason
+and UI tree evidence that proves a profile is irrelevant, such as a read-only
+screen with no editable fields.

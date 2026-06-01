@@ -40,3 +40,10 @@ Use `examples/native-ios-qa.example.json` as the minimum structure and
 Then run `scripts/native-qa-report.mjs --report <report> --out .design-director`.
 Missing screenshots, UI hierarchy captures, logs, or tooling metadata are not
 acceptance evidence.
+
+Required profile coverage is inferred from concrete metadata, not from
+`profile` or `profiles` labels alone. For standard QA, light, dark, large text,
+and keyboard-focused states must be backed by matching fields such as
+`appearance`, `contentSize`, and `keyboard`. Use `notApplicableProfiles` only
+with a reason and hierarchy evidence that proves a profile is irrelevant, such
+as a read-only screen with no editable fields.

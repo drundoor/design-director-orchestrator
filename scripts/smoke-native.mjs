@@ -43,17 +43,45 @@ async function main() {
       osVersion: "latest"
     },
     tooling: { commandsOrToolCalls: ["smoke fixture"] },
-    matrix: [{
-      state: "home",
-      profiles: ["default-light", "dark", "large-text", "keyboard-focused"],
-      appearance: "light",
-      contentSize: "default",
-      orientation: "portrait",
-      keyboard: true,
-      screenshot: "screen.png",
-      uiHierarchy: "hierarchy.json",
-      result: "pass"
-    }],
+    matrix: [
+      {
+        state: "home-light",
+        appearance: "light",
+        contentSize: "default",
+        orientation: "portrait",
+        screenshot: "screen.png",
+        uiHierarchy: "hierarchy.json",
+        result: "pass"
+      },
+      {
+        state: "home-dark",
+        appearance: "dark",
+        contentSize: "default",
+        orientation: "portrait",
+        screenshot: "screen.png",
+        uiHierarchy: "hierarchy.json",
+        result: "pass"
+      },
+      {
+        state: "home-large",
+        appearance: "light",
+        contentSize: "accessibilityLarge",
+        orientation: "portrait",
+        screenshot: "screen.png",
+        uiHierarchy: "hierarchy.json",
+        result: "pass"
+      },
+      {
+        state: "home-keyboard",
+        appearance: "light",
+        contentSize: "default",
+        orientation: "portrait",
+        keyboard: true,
+        screenshot: "screen.png",
+        uiHierarchy: "hierarchy.json",
+        result: "pass"
+      }
+    ],
     checks: { logsReviewed: "checked" },
     logs: "runtime.log"
   });

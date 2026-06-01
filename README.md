@@ -76,6 +76,10 @@ npm test
 # all tests pass
 node scripts/install-local.mjs --dry-run
 # prints repository, target, and mode without changing files
+npm run smoke:web
+# verifies the web QA gate on a static fixture
+npm run smoke:native
+# verifies a passing native QA fixture
 npm run smoke:native:fail
 # exits successfully only when intentionally missing native evidence is rejected
 ```
@@ -91,7 +95,7 @@ Troubleshooting:
 For Codex:
 
 ```text
-Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm install`, run `npx playwright install chromium`, run `node scripts/install-local.mjs --dry-run --symlink`, install with `node scripts/install-local.mjs --symlink`, then verify that `SKILL.md` is valid and that `npm test` passes.
+Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm install`, run `npx playwright install chromium`, run `node scripts/install-local.mjs --dry-run --symlink`, install with `node scripts/install-local.mjs --symlink`, then verify that `SKILL.md` is valid and that `npm test`, `npm run smoke:web`, `npm run smoke:native`, and `npm run smoke:native:fail` pass.
 ```
 
 For Claude or another coding agent:
@@ -137,7 +141,7 @@ The intent is separate from the platform. Use `repair + native-ios` or `qa + nat
 
 1. Start the local app or point the config at a deployed URL.
 2. Run state discovery or explicitly waive it for static pages.
-3. Create or update `.design-director/render.config.json`.
+3. Create or update `.design-director/design-brief.md` and `.design-director/render.config.json`.
 4. Run the render, DOM, and visual-consistency audits.
 5. Generate screenshot notes and inspect screenshots, including focused active states.
 6. Generate the QA report.
@@ -168,7 +172,7 @@ node ~/.codex/skills/design-director/scripts/qa-report.mjs \
   --out .design-director
 ```
 
-Final web acceptance means `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
+Final web acceptance means `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`, with `.design-director/design-brief.md` present. Use `--evidence-only` only when the task is explicitly validating evidence rather than accepting design work.
 
 For non-interactive static pages only, add `--static` to waive state discovery. Static mode still fails if the DOM audit finds visible interactive controls. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence and exit nonzero unless `--allow-partial-exit-zero` is explicitly supplied.
 
@@ -179,6 +183,7 @@ Minimum successful web QA artifact tree:
   render-results.json
   dom-audit.json
   visual-consistency-audit.json
+  design-brief.md
   screenshot-notes.md
   design-qa.json
   design-qa.md
@@ -194,7 +199,7 @@ node ~/.codex/skills/design-director/scripts/native-qa-report.mjs \
   --out .design-director
 ```
 
-Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
+Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Profile labels in a report are descriptive only; coverage is inferred from fields such as `appearance`, `contentSize`, `keyboard`, `theme`, `fontScale`, and `ime`. Use `notApplicableProfiles` with reason plus hierarchy/tree evidence only when a required profile truly does not apply, such as a read-only screen with no editable field. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
 
 Minimum successful native QA artifact tree:
 
@@ -263,7 +268,8 @@ The QA scripts support state actions so the design pass can inspect UI while it 
     "componentSelectors": [".card", "[data-card]"],
     "peerValueSelectors": [".metric-value"],
     "overlaySelectors": ["[role='listbox'][data-state='open']"],
-    "ignoreSelectors": [".visually-hidden"]
+    "ignoreSelectors": [".visually-hidden"],
+    "warningOnlySelectors": [".intentional-masonry"]
   }
 }
 ```
@@ -272,7 +278,7 @@ Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`
 
 Validate config shape with `scripts/render.config.schema.json` when your editor or CI supports JSON Schema.
 
-Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every final-QA waiver needs a check, reason, evidence, owner, and expiry date. Scope waivers to a state, selector, route, or viewport whenever possible; unused valid waivers fail the QA report so stale waivers do not accumulate.
+Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every final-QA waiver needs a check, reason, evidence, owner, and expiry date. Scope waivers to a state, selector, route, or viewport whenever possible; unused valid waivers fail the QA report so stale waivers do not accumulate. State coverage dispositions also need evidence discipline: non-rendered dispositions need a reason, and `waived`, `duplicate`, and `low-value` need evidence.
 
 ## Reference Depth
 

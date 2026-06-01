@@ -18,6 +18,9 @@ Run the script smoke tests before opening a pull request:
 
 ```sh
 npm test
+npm run smoke:web
+npm run smoke:native
+npm run smoke:native:fail
 ```
 
 When adding a visual heuristic, add paired bad and fixed fixtures so the check

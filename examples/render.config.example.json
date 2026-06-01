@@ -31,5 +31,12 @@
     { "width": 375, "height": 900 },
     { "width": 768, "height": 1024 },
     { "width": 1440, "height": 1000 }
-  ]
+  ],
+  "visualAudit": {
+    "componentSelectors": [".card", "[data-card]"],
+    "peerValueSelectors": [".metric-value"],
+    "overlaySelectors": ["[role='listbox'][data-state='open']"],
+    "ignoreSelectors": [".visually-hidden"],
+    "warningOnlySelectors": [".intentional-masonry"]
+  }
 }

@@ -51,6 +51,5 @@
   },
   "logs": ".design-director/ios-runtime-errors.txt",
   "blockers": [],
-  "warnings": [],
-  "waivers": []
+  "warnings": []
 }

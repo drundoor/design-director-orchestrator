@@ -27,7 +27,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: native-qa-report.mjs --report .design-director/native-ios-qa.json [--out .design-director] [--profile minimal|standard|deep] [--partial]
+  return `Usage: native-qa-report.mjs --report .design-director/native-ios-qa.json [--out .design-director] [--profile minimal|standard|deep] [--partial] [--allow-partial-exit-zero]
 
 Validates native iOS/Android QA report evidence and writes:
 - native-design-qa.json
@@ -51,6 +51,47 @@ function evidencePath(outDir, file) {
   return path.resolve(outDir, file);
 }
 
+function artifactPath(outDir, file) {
+  if (!file) return file;
+  const absolute = evidencePath(outDir, file);
+  if (!absolute) return file;
+  const relative = path.relative(outDir, absolute);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative.replaceAll(path.sep, "/");
+  return "[absolute-path-redacted]";
+}
+
+function imageDimensions(data, flags) {
+  if (flags.isPng && data.length >= 24) {
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  }
+  if (flags.isJpeg) {
+    let offset = 2;
+    while (offset + 9 < data.length) {
+      if (data[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = data[offset + 1];
+      const length = data.readUInt16BE(offset + 2);
+      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+        return { height: data.readUInt16BE(offset + 5), width: data.readUInt16BE(offset + 7) };
+      }
+      if (!length) break;
+      offset += 2 + length;
+    }
+  }
+  if (flags.isWebp && data.length >= 30) {
+    const subtype = data.slice(12, 16).toString("ascii");
+    if (subtype === "VP8X" && data.length >= 30) {
+      return {
+        width: 1 + data.readUIntLE(24, 3),
+        height: 1 + data.readUIntLE(27, 3),
+      };
+    }
+  }
+  return null;
+}
+
 async function inspectImage(file, outDir) {
   const absolute = evidencePath(outDir, file);
   if (!absolute) return { path: file, exists: false, valid: false, reason: "path missing" };
@@ -59,11 +100,11 @@ async function inspectImage(file, outDir) {
     const isPng = data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a;
     const isJpeg = data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
     const isWebp = data.length >= 12 && data.slice(0, 4).toString("ascii") === "RIFF" && data.slice(8, 12).toString("ascii") === "WEBP";
-    const dimensions = isPng && data.length >= 24 ? { width: data.readUInt32BE(16), height: data.readUInt32BE(20) } : null;
-    const valid = data.length > 16 && (isPng || isJpeg || isWebp) && (!dimensions || (dimensions.width >= 24 && dimensions.height >= 24));
-    return { path: file, absolutePath: absolute, exists: true, valid, size: data.length, width: dimensions?.width || null, height: dimensions?.height || null, reason: valid ? null : "not a valid or meaningful PNG, JPEG, or WebP image" };
+    const dimensions = imageDimensions(data, { isPng, isJpeg, isWebp });
+    const valid = data.length > 16 && (isPng || isJpeg || isWebp) && dimensions && dimensions.width >= 24 && dimensions.height >= 24;
+    return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: true, valid, size: data.length, width: dimensions?.width || null, height: dimensions?.height || null, reason: valid ? null : "not a valid or meaningful PNG, JPEG, or WebP image with readable dimensions" };
   } catch (error) {
-    if (error.code === "ENOENT") return { path: file, absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
+    if (error.code === "ENOENT") return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
     throw error;
   }
 }
@@ -73,9 +114,9 @@ async function inspectTextArtifact(file, outDir) {
   if (!absolute) return { path: file, exists: false, valid: false, reason: "path missing" };
   try {
     const stat = await fs.stat(absolute);
-    return { path: file, absolutePath: absolute, exists: true, valid: stat.size > 0, size: stat.size, reason: stat.size > 0 ? null : "file is empty" };
+    return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: true, valid: stat.size > 0, size: stat.size, reason: stat.size > 0 ? null : "file is empty" };
   } catch (error) {
-    if (error.code === "ENOENT") return { path: file, absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
+    if (error.code === "ENOENT") return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
     throw error;
   }
 }
@@ -83,7 +124,7 @@ async function inspectTextArtifact(file, outDir) {
 async function inspectLogArtifact(file, outDir) {
   const base = await inspectTextArtifact(file, outDir);
   if (!base.exists || !base.valid) return base;
-  const text = await fs.readFile(base.absolutePath, "utf8");
+  const text = await fs.readFile(base._absolutePath, "utf8");
   const crashPattern = /(FATAL EXCEPTION|CRASH|uncaught exception|Terminating app due to uncaught exception|SIGABRT|Fatal signal)/i;
   return { ...base, crashSignature: crashPattern.test(text) };
 }
@@ -125,8 +166,12 @@ function requiredProfilesFor(platform, profile) {
   return (platform === "native-ios" ? ios : android)[profile] || null;
 }
 
+function declaredProfiles(entry) {
+  return new Set(asArray(entry.profiles || entry.profile).filter(Boolean));
+}
+
 function entryProfiles(entry, platform) {
-  const profiles = new Set(asArray(entry.profiles || entry.profile).filter(Boolean));
+  const profiles = new Set();
   const stateText = String(entry.state || "").toLowerCase();
   if (platform === "native-ios") {
     if (entry.appearance === "light") profiles.add("default-light");
@@ -142,6 +187,27 @@ function entryProfiles(entry, platform) {
     if (/large/i.test(String(entry.displaySize || ""))) profiles.add("display-large");
   }
   return profiles;
+}
+
+function normalizeNotApplicableProfiles(value) {
+  if (!value) return new Map();
+  if (Array.isArray(value)) {
+    return new Map(value.filter((entry) => entry?.profile).map((entry) => [entry.profile, entry]));
+  }
+  return new Map(Object.entries(value).map(([profile, entry]) => [
+    profile,
+    typeof entry === "string" ? { profile, reason: entry } : { profile, ...entry },
+  ]));
+}
+
+function artifactPublic(entry) {
+  if (!entry || typeof entry !== "object") return entry;
+  const { _absolutePath, ...publicEntry } = entry;
+  return publicEntry;
+}
+
+function treeSuggestsEditable(text) {
+  return /(XCUIElementTypeTextField|XCUIElementTypeTextView|android\.widget\.EditText|class=\"[^\"]*EditText|editable=\"true\"|<input\b|<textarea\b|contenteditable)/i.test(text || "");
 }
 
 function bullet(items) {
@@ -168,6 +234,9 @@ async function main() {
   const evidence = { screenshots: [], trees: [], logs: [] };
   const platform = report.platform;
   const coveredProfiles = new Set();
+  const claimedProfiles = new Set();
+  const treeTexts = [];
+  const notApplicableProfiles = normalizeNotApplicableProfiles(report.notApplicableProfiles);
 
   if (!["native-ios", "native-android"].includes(platform)) {
     incomplete.push("platform must be native-ios or native-android");
@@ -184,6 +253,9 @@ async function main() {
   if (!Array.isArray(report.matrix) || !report.matrix.length) {
     incomplete.push("matrix: at least one captured state is required");
   }
+  if (report.waivers !== undefined) {
+    incomplete.push("report.waivers is not supported by native-qa-report; use notApplicableProfiles for profile exceptions and keep design waivers in the human report");
+  }
 
   const treeField = matrixTreeField(platform);
   for (const [index, entry] of (report.matrix || []).entries()) {
@@ -195,20 +267,29 @@ async function main() {
 
     if (entry.screenshot) {
       const image = await inspectImage(entry.screenshot, outDir);
-      evidence.screenshots.push(image);
-      if (!image.valid) incomplete.push(`${label}: screenshot ${entry.screenshot} ${image.reason}`);
+      evidence.screenshots.push(artifactPublic(image));
+      if (!image.valid) incomplete.push(`${label}: screenshot ${artifactPath(outDir, entry.screenshot)} ${image.reason}`);
     }
     if (entry[treeField]) {
       const tree = await inspectTextArtifact(entry[treeField], outDir);
-      evidence.trees.push(tree);
-      if (!tree.valid) incomplete.push(`${label}: ${treeField} ${entry[treeField]} ${tree.reason}`);
+      evidence.trees.push(artifactPublic(tree));
+      if (!tree.valid) incomplete.push(`${label}: ${treeField} ${artifactPath(outDir, entry[treeField])} ${tree.reason}`);
+      if (tree.valid) {
+        treeTexts.push(await fs.readFile(tree._absolutePath, "utf8"));
+      }
     }
     if (["fail", "blocked"].includes(entry.result)) blockers.push(`${label}: result is ${entry.result}`);
     if (entry.result === "needs-review") {
       if (args.partial) warnings.push(`${label}: result needs review`);
       else incomplete.push(`${label}: result needs review`);
     }
-    for (const profile of entryProfiles(entry, platform)) coveredProfiles.add(profile);
+    const inferred = entryProfiles(entry, platform);
+    const declared = declaredProfiles(entry);
+    for (const profile of declared) {
+      claimedProfiles.add(profile);
+      if (!inferred.has(profile)) warnings.push(`${label}: declared profile ${profile} is not supported by state metadata and does not count toward required coverage`);
+    }
+    for (const profile of inferred) coveredProfiles.add(profile);
   }
 
   const requiredProfiles = requiredProfilesFor(platform, args.profile);
@@ -216,7 +297,32 @@ async function main() {
     incomplete.push("profile coverage can only be checked for native-ios or native-android");
   } else {
     for (const profile of requiredProfiles) {
-      if (!coveredProfiles.has(profile)) incomplete.push(`required profile not covered: ${profile}`);
+      if (coveredProfiles.has(profile)) continue;
+      const notApplicable = notApplicableProfiles.get(profile);
+      if (notApplicable) {
+        const reason = String(notApplicable.reason || "").trim();
+        const evidenceFile = notApplicable.evidence;
+        if (!reason) incomplete.push(`required profile not applicable record is missing a reason: ${profile}`);
+        if (!evidenceFile) {
+          incomplete.push(`required profile not applicable record is missing evidence: ${profile}`);
+        } else {
+          const evidenceArtifact = await inspectTextArtifact(evidenceFile, outDir);
+          evidence.trees.push(artifactPublic({ ...evidenceArtifact, notApplicableProfile: profile }));
+          if (!evidenceArtifact.valid) incomplete.push(`required profile not applicable evidence invalid for ${profile}: ${artifactPath(outDir, evidenceFile)} ${evidenceArtifact.reason}`);
+          else if (["keyboard-focused", "ime-focused"].includes(profile)) {
+            const evidenceText = await fs.readFile(evidenceArtifact._absolutePath, "utf8");
+            if (treeSuggestsEditable(evidenceText) || treeTexts.some(treeSuggestsEditable)) {
+              incomplete.push(`required profile ${profile} cannot be marked not applicable because hierarchy evidence contains editable fields`);
+            } else {
+              warnings.push(`required profile marked not applicable: ${profile} (${reason})`);
+            }
+          } else {
+            warnings.push(`required profile marked not applicable: ${profile} (${reason})`);
+          }
+        }
+      } else {
+        incomplete.push(`required profile not covered: ${profile}`);
+      }
     }
   }
 
@@ -227,9 +333,9 @@ async function main() {
   if (!logPaths.length) incomplete.push("logs: at least one log artifact path is required");
   for (const logPath of logPaths) {
     const log = await inspectLogArtifact(logPath, outDir);
-    evidence.logs.push(log);
-    if (!log.exists) incomplete.push(`logs: ${logPath} ${log.reason}`);
-    else if (log.crashSignature) blockers.push(`logs: ${logPath} contains crash signature`);
+    evidence.logs.push(artifactPublic(log));
+    if (!log.exists) incomplete.push(`logs: ${artifactPath(outDir, logPath)} ${log.reason}`);
+    else if (log.crashSignature) blockers.push(`logs: ${artifactPath(outDir, logPath)} contains crash signature`);
   }
 
   for (const blocker of report.blockers || []) blockers.push(String(blocker));
@@ -239,7 +345,7 @@ async function main() {
   const qa = {
     generatedAt: new Date().toISOString(),
     tool: "native-qa-report",
-    reportPath,
+    reportPath: artifactPath(outDir, reportPath),
     platform,
     status,
     blockers,
@@ -248,6 +354,8 @@ async function main() {
     profile: args.profile,
     requiredProfiles: requiredProfiles || [],
     coveredProfiles: [...coveredProfiles].sort(),
+    claimedProfiles: [...claimedProfiles].sort(),
+    notApplicableProfiles: [...notApplicableProfiles.keys()].sort(),
     evidence,
     acceptanceReady: status === "pass" && !args.partial,
   };
@@ -272,8 +380,9 @@ ${bullet(warnings)}
 `);
 
   console.log(`native-qa-report: wrote ${path.join(outDir, "native-design-qa.json")} (${status})`);
-  if (status !== "pass") process.exitCode = 1;
-  else if (args.partial && incomplete.length && !args.allowPartialExitZero) process.exitCode = 2;
+  if (blockers.length) process.exitCode = 1;
+  else if (incomplete.length && args.partial && !args.allowPartialExitZero) process.exitCode = 2;
+  else if (incomplete.length && !args.partial) process.exitCode = 1;
 }
 
 main().catch((error) => {
