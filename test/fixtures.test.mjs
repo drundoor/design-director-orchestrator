@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { qaRunMetadata } from "../scripts/lib/browser-utils.mjs";
+import { qaRunMetadata, stableHash, stableStringify } from "../scripts/lib/browser-utils.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -127,10 +127,26 @@ async function writeNativeProfileArtifacts(out, names, options = {}) {
   const treeText = options.treeText || JSON.stringify({ windows: [] });
   const treeExt = options.treeExt || "json";
   const imageExt = options.imageExt || "png";
-  for (const name of names) {
-    await fs.writeFile(path.join(out, `${name}.${imageExt}`), imageBytes);
-    await fs.writeFile(path.join(out, `${name}-hierarchy.${treeExt}`), treeText);
+  for (const [index, name] of names.entries()) {
+    const bytes = Buffer.from(imageBytes);
+    const mutationOffset = bytes.length > 32 ? 30 : 20;
+    bytes[mutationOffset] = (bytes[mutationOffset] + index + 1) % 255;
+    const treeBody = typeof treeText === "function" ? treeText(name, index) : `${treeText}\n${name}`;
+    await fs.writeFile(path.join(out, `${name}.${imageExt}`), bytes);
+    await fs.writeFile(path.join(out, `${name}-hierarchy.${treeExt}`), treeBody);
   }
+}
+
+function nativeMeta(tooling, overrides = {}) {
+  const now = Date.now();
+  return {
+    qaRunId: "native-test-run",
+    appBuildId: "native-test-build",
+    startedAt: new Date(now - 1000).toISOString(),
+    finishedAt: new Date(now + 1000).toISOString(),
+    toolingHash: stableHash(stableStringify(tooling), 16),
+    ...overrides,
+  };
 }
 
 async function writeInspectedNotes(file, screenshots) {
@@ -735,6 +751,73 @@ test("qa-report requires reasons and evidence for non-rendered state coverage di
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.ok(qa.incomplete.some((issue) => issue.includes("requires a reason")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("requires evidence")));
+});
+
+test("qa-report rejects high-confidence safe not-relevant dispositions without evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-not-relevant-evidence-"));
+  await createQaArtifacts(out, {
+    discovery: discoveryMeta({
+      discoveryHash: "current-discovery",
+      candidates: [{
+        kind: "overlay-trigger",
+        selector: "#menuButton",
+        confidence: "high",
+        mutationRisk: "safe",
+        discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: { width: 375, height: 700 } }
+      }]
+    })
+  });
+  await writeJson(path.join(out, "state-coverage.json"), {
+    generatedAt: new Date().toISOString(),
+    discoveryHash: "current-discovery",
+    dispositions: [{
+      kind: "overlay-trigger",
+      selector: "#menuButton",
+      disposition: "rejected",
+      risk: "not-relevant",
+      reason: "Not part of the current task path.",
+      discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: "375x700" }
+    }]
+  });
+
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("requires evidence unless risk is destructive or sensitive")));
+});
+
+test("qa-report accepts high-confidence safe not-relevant dispositions with evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-not-relevant-with-evidence-"));
+  await createQaArtifacts(out, {
+    discovery: discoveryMeta({
+      discoveryHash: "current-discovery",
+      candidates: [{
+        kind: "overlay-trigger",
+        selector: "#menuButton",
+        confidence: "high",
+        mutationRisk: "safe",
+        discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: { width: 375, height: 700 } }
+      }]
+    })
+  });
+  await fs.mkdir(path.join(out, "evidence"), { recursive: true });
+  await fs.writeFile(path.join(out, "evidence/menu-not-relevant.md"), "Screenshot review confirms this menu is outside the accepted task path.\n");
+  await writeJson(path.join(out, "state-coverage.json"), {
+    generatedAt: new Date().toISOString(),
+    discoveryHash: "current-discovery",
+    dispositions: [{
+      kind: "overlay-trigger",
+      selector: "#menuButton",
+      disposition: "rejected",
+      risk: "not-relevant",
+      reason: "The current brief excludes global navigation.",
+      evidence: "evidence/menu-not-relevant.md",
+      discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: "375x700" }
+    }]
+  });
+
+  await runScript(["scripts/qa-report.mjs", "--out", out]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
 });
 
 test("qa-report enforces design brief unless evidence-only mode is explicit", async () => {
@@ -1359,21 +1442,51 @@ test("script options affect evidenceHash without changing shared configHash", ()
   assert.notEqual(lowThreshold.evidenceHash, highThreshold.evidenceHash);
 });
 
+test("public docs expose ordinary prompts, new-build flow, research workflow, and wrapper commands", async () => {
+  const readme = await fs.readFile(path.join(repoRoot, "README.md"), "utf8");
+  const modes = await fs.readFile(path.join(repoRoot, "references/modes.md"), "utf8");
+  const research = await fs.readFile(path.join(repoRoot, "references/research-and-inspiration.md"), "utf8");
+  const pkg = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
+
+  for (const phrase of [
+    "Check this UI",
+    "Fix this visual bug",
+    "Make this page look much better",
+    "Build a new marketing site",
+    "Research reputable open-source UI libraries",
+    "Redesign this iPhone screen",
+    "Audit this Android Compose screen",
+    "Improve this game/canvas UI",
+    "Run final design QA",
+  ]) {
+    assert.ok(readme.includes(phrase), `README missing prompt phrase: ${phrase}`);
+  }
+  assert.ok(modes.includes("create a new site/app"));
+  assert.ok(modes.includes("concept -> implement -> qa"));
+  assert.ok(research.includes("GitHub Design Skills Or Agent Workflows"));
+  assert.ok(research.includes("allowed_use"));
+  for (const scriptName of ["setup", "verify", "qa:web", "qa:web:final", "qa:native:ios", "qa:native:android"]) {
+    assert.ok(pkg.scripts[scriptName], `package script missing: ${scriptName}`);
+  }
+});
+
 test("native-qa-report passes complete iOS evidence", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-ios-"));
   await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large", "home-keyboard"]);
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  const tooling = {
+    commandsOrToolCalls: ["session_show_defaults", "build_run_sim", "capture screenshot"]
+  };
   await writeJson(path.join(out, "native-ios-qa.json"), {
     platform: "native-ios",
+    ...nativeMeta(tooling),
     target: {
       workspace: "App.xcworkspace",
       scheme: "App",
       simulator: "iPhone 16",
       osVersion: "latest"
     },
-    tooling: {
-      commandsOrToolCalls: ["session_show_defaults", "build_run_sim", "capture screenshot"]
-    },
+    tooling,
     matrix: [
       {
         state: "home-light",
@@ -1423,9 +1536,102 @@ test("native-qa-report passes complete iOS evidence", async () => {
   const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
   assert.equal(qa.status, "pass");
   assert.equal(qa.acceptanceReady, true);
+  assert.ok(qa.nativeEvidenceHash);
+  assert.ok(qa.evidence.screenshots.every((entry) => entry.sha256));
   const raw = await fs.readFile(path.join(out, "native-design-qa.json"), "utf8");
   assert.equal(raw.includes(out), false);
   assert.equal(raw.includes("absolutePath"), false);
+});
+
+test("native-qa-report rejects screenshots modified after report generation", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-mutated-screenshot-"));
+  await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large", "home-keyboard"]);
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  const tooling = { commandsOrToolCalls: ["capture screenshots"] };
+  const finishedAt = new Date(Date.now() - 60_000).toISOString();
+  const old = new Date(Date.now() - 120_000);
+  for (const file of await fs.readdir(out)) {
+    await fs.utimes(path.join(out, file), old, old);
+  }
+  const mutated = new Date(Date.now());
+  await fs.utimes(path.join(out, "home-light.png"), mutated, mutated);
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    ...nativeMeta(tooling, { startedAt: new Date(Date.now() - 180_000).toISOString(), finishedAt }),
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling,
+    matrix: [
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home-light.png", uiHierarchy: "home-light-hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home-dark.png", uiHierarchy: "home-dark-hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home-large.png", uiHierarchy: "home-large-hierarchy.json", result: "pass" },
+      { state: "home-keyboard", appearance: "light", contentSize: "default", orientation: "portrait", keyboard: true, screenshot: "home-keyboard.png", uiHierarchy: "home-keyboard-hierarchy.json", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out, "--max-evidence-age-ms", "999999999"]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("artifact was modified after native report finishedAt")));
+});
+
+test("native-qa-report rejects stale native artifacts even with current JSON", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-stale-artifact-"));
+  await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large", "home-keyboard"]);
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  const old = new Date(Date.now() - 120_000);
+  await fs.utimes(path.join(out, "home-dark.png"), old, old);
+  const tooling = { commandsOrToolCalls: ["capture screenshots"] };
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    ...nativeMeta(tooling),
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling,
+    matrix: [
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home-light.png", uiHierarchy: "home-light-hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home-dark.png", uiHierarchy: "home-dark-hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home-large.png", uiHierarchy: "home-large-hierarchy.json", result: "pass" },
+      { state: "home-keyboard", appearance: "light", contentSize: "default", orientation: "portrait", keyboard: true, screenshot: "home-keyboard.png", uiHierarchy: "home-keyboard-hierarchy.json", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out, "--max-evidence-age-ms", "1000"]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("artifact is") && issue.includes("exceeding max evidence age")));
+});
+
+test("native-qa-report rejects Android logs modified after report generation", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-android-log-mutated-"));
+  await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large", "home-ime"], { treeExt: "xml" });
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  const tooling = { commandsOrToolCalls: ["./gradlew :app:assembleDebug", "adb logcat -d"] };
+  const finishedAt = new Date(Date.now() - 60_000).toISOString();
+  const old = new Date(Date.now() - 120_000);
+  for (const file of await fs.readdir(out)) {
+    await fs.utimes(path.join(out, file), old, old);
+  }
+  const mutated = new Date(Date.now());
+  await fs.utimes(path.join(out, "runtime.log"), mutated, mutated);
+  await writeJson(path.join(out, "native-android-qa.json"), {
+    platform: "native-android",
+    ...nativeMeta(tooling, { startedAt: new Date(Date.now() - 180_000).toISOString(), finishedAt }),
+    target: { module: ":app", variant: "debug", device: "Pixel 8", apiLevel: 35 },
+    tooling,
+    matrix: [
+      { state: "home-light", theme: "light", fontScale: 1, displaySize: "default", screenshot: "home-light.png", uiTree: "home-light-hierarchy.xml", result: "pass" },
+      { state: "home-dark", theme: "dark", fontScale: 1, displaySize: "default", screenshot: "home-dark.png", uiTree: "home-dark-hierarchy.xml", result: "pass" },
+      { state: "home-large", theme: "light", fontScale: 1.3, displaySize: "default", screenshot: "home-large.png", uiTree: "home-large-hierarchy.xml", result: "pass" },
+      { state: "home-ime", theme: "light", fontScale: 1, displaySize: "default", ime: true, screenshot: "home-ime.png", uiTree: "home-ime-hierarchy.xml", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-android-qa.json"), "--out", out, "--max-evidence-age-ms", "999999999"]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("logs: runtime.log") && issue.includes("modified after native report finishedAt")));
 });
 
 test("native-qa-report does not count self-declared profiles without supporting metadata", async () => {
@@ -1669,10 +1875,12 @@ test("native-qa-report sanitizes report-provided paths and accepts VP8 WebP scre
     imageExt: "webp",
   });
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  const tooling = { commandsOrToolCalls: ["capture screenshot"] };
   await writeJson(path.join(out, "native-ios-qa.json"), {
     platform: "native-ios",
+    ...nativeMeta(tooling),
     target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
-    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    tooling,
     matrix: [
       { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home-light.webp", uiHierarchy: "home-light-hierarchy.json", result: "pass" },
       { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home-dark.webp", uiHierarchy: "home-dark-hierarchy.json", result: "pass" },
@@ -1702,10 +1910,12 @@ test("native-qa-report accepts not-applicable keyboard profile only with hierarc
   });
   await fs.writeFile(path.join(out, "keyboard-not-applicable-hierarchy.json"), "<hierarchy><window label=\"Read only\" /></hierarchy>");
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  const tooling = { commandsOrToolCalls: ["capture screenshot"] };
   await writeJson(path.join(out, "native-ios-qa.json"), {
     platform: "native-ios",
+    ...nativeMeta(tooling),
     target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
-    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    tooling,
     matrix: [
       { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home-light.png", uiHierarchy: "home-light-hierarchy.json", result: "pass" },
       { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home-dark.png", uiHierarchy: "home-dark-hierarchy.json", result: "pass" },

@@ -12,6 +12,7 @@ evidence across emulator/device states, not a checklist claim.
 - theme: light or dark; capture separate entries instead of using `both`
 - navigation mode when relevant
 - command or tool call used to build/run/capture
+- `qaRunId`, `startedAt`, `finishedAt`, `toolingHash`, and optional `appBuildId`
 
 ## Preferred Tool Flow
 
@@ -39,7 +40,8 @@ adb logcat -d '*:E' > .design-director/logcat-errors.txt
 Use `examples/native-android-qa.example.json` as the minimum structure and
 `schemas/native-android-qa.schema.json` when your editor or CI supports JSON
 Schema. Then run `scripts/native-qa-report.mjs --report <report> --out
-.design-director`. Missing screenshots, UI tree captures, logs, or tooling
+.design-director` or `npm run qa:native:android -- --report <report>`. Missing
+screenshots, UI tree captures, logs, run metadata, artifact hashes, or tooling
 metadata are not acceptance evidence.
 
 Required profile coverage is inferred from concrete metadata, not from
@@ -49,3 +51,8 @@ scale, and IME-focused states must be backed by matching fields such as
 and UI tree evidence. Use `notApplicableProfiles` only with a reason and UI tree
 evidence that proves a profile is irrelevant, such as a read-only screen with no
 editable fields.
+
+The validator hashes screenshots, UI tree captures, and logs, records
+`nativeEvidenceHash`, rejects stale artifacts, and rejects files modified after
+the report `finishedAt`. Capture evidence first, set `finishedAt` after capture,
+then run the validator.

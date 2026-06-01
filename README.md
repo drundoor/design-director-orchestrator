@@ -12,6 +12,31 @@ Design Director is a Codex skill for governing UI design work that needs more th
 - Flags technical design failures: console errors, horizontal overflow, clipped text, tiny text, tap-target issues, inaccessible focus paths, hover-only content, and missing reduced-motion paths.
 - Flags visual consistency failures: peer typography mismatches, grid alignment drift, spacing outliers, media/title anchoring problems, related-width mismatches, camouflaged controls, and occluded or clipped overlays.
 
+## Ask It Like This
+
+Use ordinary language. Design Director maps plain requests to audit, repair,
+revamp, concept, study, implement, or QA flows.
+
+- "Check this UI for design problems. Do not change code."
+- "Fix this visual bug and verify it on mobile and desktop."
+- "Make this page look much better, but preserve the product behavior."
+- "Give me three design directions before writing code."
+- "Build a new marketing site for this product and guide the visual direction."
+- "Create a new dashboard from this data and make it feel like a polished SaaS tool."
+- "Use these screenshots as inspiration, but do not copy their layout or assets."
+- "Research reputable open-source UI libraries and design skills we can lawfully reference for this app; do not copy assets."
+- "Redesign this iPhone screen and run native iOS QA with dark mode and Dynamic Type."
+- "Audit this Android Compose screen with font scale, dark theme, and IME states."
+- "Improve this game/canvas UI and verify input, overlays, and canvas bounds."
+- "Run final design QA and tell me whether it is acceptance ready."
+
+Common flows:
+
+- Existing project audit: point the agent at the repo or running URL and ask for `audit`; no code changes should be made.
+- Existing project repair or revamp: describe the problem or desired style, allow code changes, and require rendered QA.
+- New build: describe the audience, content, target platform, style, inspirations, and anti-goals; the orchestrator treats it as `concept -> implement -> QA`.
+- Inspiration study: provide URLs/screenshots or ask the agent to research; every source must have a license/use record before implementation.
+
 ## Repository Layout
 
 - `SKILL.md`: main Design Director orchestration instructions.
@@ -28,23 +53,20 @@ Design Director is a Codex skill for governing UI design work that needs more th
 - `fixtures/`: generic paired good/bad fixtures for audit regression checks.
 - `examples/`: reusable example configs and QA note templates.
 - `references/native-ios-qa.md` and `references/native-android-qa.md`: operational report contracts for native app QA.
+- `references/research-and-inspiration.md`: lawful inspiration, library, and GitHub-skill research protocol.
 - `PROVENANCE.md`: public-safe provenance for bundled files.
 - `REFERENCED_SKILLS.md`: referenced skills and license status notes.
 - `REFERENCE_LICENSE_POLICY.md`: external website, asset, component, and implementation-reference license policy.
 
 ## Installation
 
-Clone the repository, install dependencies, and run the smoke tests:
+Clone the repository, install dependencies, and run the verification suite:
 
 ```sh
 git clone https://github.com/drundoor/design-director-orchestrator.git
 cd design-director-orchestrator
-npm install
-npx playwright install chromium
-npm test
-npm run smoke:web
-npm run smoke:native
-npm run smoke:native:fail
+npm run setup
+npm run verify
 ```
 
 Copy or symlink it into your Codex skills directory:
@@ -72,16 +94,10 @@ rsync -a --exclude='.git' --exclude='node_modules' --exclude='.design-director' 
 Expected verification output:
 
 ```sh
-npm test
-# all tests pass
+npm run verify
+# runs tests, web smoke, native smoke, native failure smoke, and package dry run
 node scripts/install-local.mjs --dry-run
 # prints repository, target, and mode without changing files
-npm run smoke:web
-# verifies the web QA gate on a static fixture
-npm run smoke:native
-# verifies a passing native QA fixture
-npm run smoke:native:fail
-# exits successfully only when intentionally missing native evidence is rejected
 ```
 
 Troubleshooting:
@@ -95,13 +111,13 @@ Troubleshooting:
 For Codex:
 
 ```text
-Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm install`, run `npx playwright install chromium`, run `node scripts/install-local.mjs --dry-run --symlink`, install with `node scripts/install-local.mjs --symlink`, then verify that `SKILL.md` is valid and that `npm test`, `npm run smoke:web`, `npm run smoke:native`, and `npm run smoke:native:fail` pass.
+Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm run setup`, run `npm run verify`, run `node scripts/install-local.mjs --dry-run --symlink`, then install with `node scripts/install-local.mjs --symlink`. After install, verify that `SKILL.md` is valid and that `npm run verify` passes.
 ```
 
 For Claude or another coding agent:
 
 ```text
-Clone https://github.com/drundoor/design-director-orchestrator. Run `npm install`, `npx playwright install chromium`, `npm test`, `npm run smoke:web`, `npm run smoke:native`, and `npm run smoke:native:fail`. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them.
+Clone https://github.com/drundoor/design-director-orchestrator. Run `npm run setup` and `npm run verify`. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them.
 ```
 
 Generic manual install:
@@ -134,8 +150,45 @@ Use intent plus platform/surface:
 - `implement`: "Implement the chosen direction and run rendered QA on active states."
 - `qa + native-ios`: "Run native iOS QA on the SwiftUI app in Simulator, including Dynamic Type and dark mode."
 - `qa + native-android`: "Run Android visual/accessibility QA on the Compose screen in emulator."
+- `create + marketing-web`: "Create a new landing page in a confident editorial style, use the supplied examples only as inspiration, then run final QA."
+- `create + dashboard`: "Create a new analytics dashboard from this data, choose a restrained SaaS style, and verify charts and filters."
 
 The intent is separate from the platform. Use `repair + native-ios` or `qa + native-android`; do not invent combined modes.
+
+## One-Command QA
+
+For draft web QA:
+
+```sh
+npm run qa:web -- --url http://127.0.0.1:5173
+```
+
+For non-interactive static pages:
+
+```sh
+npm run qa:web -- --url file:///absolute/path/page.html --static
+```
+
+The draft command creates screenshots, initializes screenshot notes, and writes
+`.design-director/design-qa.md`. It is not final acceptance until screenshot
+notes and state coverage are inspected.
+
+For final web QA after notes and state coverage are resolved:
+
+```sh
+npm run qa:web:final -- --config .design-director/render.config.json
+```
+
+For native report validation:
+
+```sh
+npm run qa:native:ios -- --report .design-director/native-ios-qa.json
+npm run qa:native:android -- --report .design-director/native-android-qa.json
+```
+
+Native reports must include `qaRunId`, `startedAt`, `finishedAt`,
+`toolingHash`, screenshots, UI hierarchy/tree files, and logs. The validator
+hashes artifacts and rejects stale or reused profile evidence.
 
 ## Rendered QA Workflow
 

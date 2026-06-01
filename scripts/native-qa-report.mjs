@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
+import { stableHash, stableStringify } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", profile: "standard" };
@@ -19,6 +21,8 @@ function parseArgs(argv) {
       args.partial = true;
     } else if (arg === "--allow-partial-exit-zero") {
       args.allowPartialExitZero = true;
+    } else if (arg === "--max-evidence-age-ms") {
+      args.maxEvidenceAgeMs = Number(argv[++i]);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -27,7 +31,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: native-qa-report.mjs --report .design-director/native-ios-qa.json [--out .design-director] [--profile minimal|standard|deep] [--partial] [--allow-partial-exit-zero]
+  return `Usage: native-qa-report.mjs --report .design-director/native-ios-qa.json [--out .design-director] [--profile minimal|standard|deep] [--partial] [--allow-partial-exit-zero] [--max-evidence-age-ms 1800000]
 
 Validates native iOS/Android QA report evidence and writes:
 - native-design-qa.json
@@ -35,7 +39,9 @@ Validates native iOS/Android QA report evidence and writes:
 
 Missing screenshots, UI hierarchy/tree captures, logs, required profile coverage,
 or target/tool metadata make the report incomplete. Failed/blocked matrix states
-are blockers; needs-review is incomplete unless --partial is supplied.`;
+are blockers; needs-review is incomplete unless --partial is supplied. Final
+native acceptance requires qaRunId, startedAt/finishedAt, toolingHash, fresh
+artifact hashes, and unique screenshot/tree evidence per required profile.`;
 }
 
 async function readJson(file) {
@@ -58,6 +64,20 @@ function artifactPath(outDir, file) {
   const relative = path.relative(outDir, absolute);
   if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative.replaceAll(path.sep, "/");
   return "[absolute-path-redacted]";
+}
+
+function sha256Hex(data) {
+  return createHash("sha256").update(data).digest("hex");
+}
+
+async function fileMetadata(absolute) {
+  const [stat, data] = await Promise.all([fs.stat(absolute), fs.readFile(absolute)]);
+  return {
+    size: data.length,
+    sha256: sha256Hex(data),
+    modifiedAt: stat.mtime.toISOString(),
+    _mtimeMs: stat.mtimeMs,
+  };
 }
 
 function pathInsideDir(dir, file) {
@@ -124,12 +144,26 @@ async function inspectImage(file, outDir) {
   }
   try {
     const data = await fs.readFile(absolute);
+    const stat = await fs.stat(absolute);
     const isPng = data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a;
     const isJpeg = data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
     const isWebp = data.length >= 12 && data.slice(0, 4).toString("ascii") === "RIFF" && data.slice(8, 12).toString("ascii") === "WEBP";
     const dimensions = imageDimensions(data, { isPng, isJpeg, isWebp });
     const valid = data.length > 16 && (isPng || isJpeg || isWebp) && dimensions && dimensions.width >= 24 && dimensions.height >= 24;
-    return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: true, valid, size: data.length, width: dimensions?.width || null, height: dimensions?.height || null, reason: valid ? null : "not a valid or meaningful PNG, JPEG, or WebP image with readable dimensions" };
+    return {
+      path: artifactPath(outDir, file),
+      _absolutePath: absolute,
+      exists: true,
+      valid,
+      size: data.length,
+      sha256: sha256Hex(data),
+      modifiedAt: stat.mtime.toISOString(),
+      _mtimeMs: stat.mtimeMs,
+      width: dimensions?.width || null,
+      height: dimensions?.height || null,
+      format: isPng ? "png" : isJpeg ? "jpeg" : isWebp ? "webp" : "unknown",
+      reason: valid ? null : "not a valid or meaningful PNG, JPEG, or WebP image with readable dimensions"
+    };
   } catch (error) {
     if (error.code === "ENOENT") return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
     throw error;
@@ -143,8 +177,8 @@ async function inspectTextArtifact(file, outDir) {
     return { path: artifactPath(outDir, file), exists: false, valid: false, reason: "evidence path is outside QA output directory" };
   }
   try {
-    const stat = await fs.stat(absolute);
-    return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: true, valid: stat.size > 0, size: stat.size, reason: stat.size > 0 ? null : "file is empty" };
+    const metadata = await fileMetadata(absolute);
+    return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: true, valid: metadata.size > 0, ...metadata, reason: metadata.size > 0 ? null : "file is empty" };
   } catch (error) {
     if (error.code === "ENOENT") return { path: artifactPath(outDir, file), _absolutePath: absolute, exists: false, valid: false, reason: "file is missing" };
     throw error;
@@ -250,8 +284,54 @@ function normalizeNotApplicableProfiles(value) {
 
 function artifactPublic(entry) {
   if (!entry || typeof entry !== "object") return entry;
-  const { _absolutePath, ...publicEntry } = entry;
-  return publicEntry;
+  return Object.fromEntries(Object.entries(entry).filter(([key]) => !key.startsWith("_")));
+}
+
+function parseTime(value) {
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+function artifactFreshnessProblems(label, artifact, runWindow, maxEvidenceAgeMs) {
+  const problems = [];
+  if (!artifact?.exists || artifact._mtimeMs === undefined) return problems;
+  const ageMs = Math.max(0, Date.now() - artifact._mtimeMs);
+  if (ageMs > maxEvidenceAgeMs) {
+    problems.push(`${label}: artifact is ${Math.round(ageMs)}ms old, exceeding max evidence age ${maxEvidenceAgeMs}ms`);
+  }
+  if (runWindow.finishedAtMs && artifact._mtimeMs > runWindow.finishedAtMs + 2000) {
+    problems.push(`${label}: artifact was modified after native report finishedAt`);
+  }
+  return problems;
+}
+
+function nativeRunMetadata(report, maxEvidenceAgeMs) {
+  const startedAtMs = parseTime(report.startedAt);
+  const finishedAtMs = parseTime(report.finishedAt || report.generatedAt);
+  const computedToolingHash = stableHash(stableStringify(report.tooling || {}), 16);
+  const problems = [];
+  if (!String(report.qaRunId || "").trim()) problems.push("report.qaRunId is required for final native acceptance");
+  if (!String(report.startedAt || "").trim()) problems.push("report.startedAt is required for final native acceptance");
+  if (!String(report.finishedAt || report.generatedAt || "").trim()) problems.push("report.finishedAt is required for final native acceptance");
+  if (!String(report.toolingHash || "").trim()) problems.push(`report.toolingHash is required for final native acceptance; computed toolingHash is ${computedToolingHash}`);
+  if (report.startedAt && !startedAtMs) problems.push("report.startedAt must be a parseable timestamp");
+  if ((report.finishedAt || report.generatedAt) && !finishedAtMs) problems.push("report.finishedAt must be a parseable timestamp");
+  if (startedAtMs && finishedAtMs && finishedAtMs < startedAtMs) problems.push("report.finishedAt must not be earlier than startedAt");
+  if (report.toolingHash && report.toolingHash !== computedToolingHash) {
+    problems.push(`report.toolingHash ${report.toolingHash} does not match computed tooling hash ${computedToolingHash}`);
+  }
+  return {
+    qaRunId: report.qaRunId || null,
+    appBuildId: report.appBuildId || null,
+    startedAt: report.startedAt || null,
+    finishedAt: report.finishedAt || report.generatedAt || null,
+    startedAtMs,
+    finishedAtMs,
+    toolingHash: report.toolingHash || null,
+    computedToolingHash,
+    maxEvidenceAgeMs,
+    problems,
+  };
 }
 
 function sanitizeStringForOutput(value, outDir) {
@@ -309,6 +389,8 @@ async function main() {
   await fs.mkdir(outDir, { recursive: true });
   const reportPath = path.resolve(args.report);
   const report = await readJson(reportPath);
+  const maxEvidenceAgeMs = Number.isFinite(args.maxEvidenceAgeMs) ? args.maxEvidenceAgeMs : 30 * 60 * 1000;
+  const runMetadata = nativeRunMetadata(report, maxEvidenceAgeMs);
 
   const blockers = [];
   const incomplete = [];
@@ -339,6 +421,7 @@ async function main() {
   if (report.waivers !== undefined) {
     incomplete.push("report.waivers is not supported by native-qa-report; use notApplicableProfiles for profile exceptions and keep design waivers in the human report");
   }
+  incomplete.push(...runMetadata.problems);
 
   const treeField = matrixTreeField(platform);
   for (const [index, entry] of (report.matrix || []).entries()) {
@@ -354,15 +437,19 @@ async function main() {
       incomplete.push(`${label}: theme must be light or dark; capture separate entries instead of both`);
     }
 
+    let image = null;
+    let tree = null;
     if (entry.screenshot) {
-      const image = await inspectImage(entry.screenshot, outDir);
+      image = await inspectImage(entry.screenshot, outDir);
       evidence.screenshots.push(artifactPublic(image));
       if (!image.valid) incomplete.push(`${label}: screenshot ${artifactPath(outDir, entry.screenshot)} ${image.reason}`);
+      incomplete.push(...artifactFreshnessProblems(`${label}: screenshot ${artifactPath(outDir, entry.screenshot)}`, image, runMetadata, maxEvidenceAgeMs));
     }
     if (entry[treeField]) {
-      const tree = await inspectTextArtifact(entry[treeField], outDir);
+      tree = await inspectTextArtifact(entry[treeField], outDir);
       evidence.trees.push(artifactPublic(tree));
       if (!tree.valid) incomplete.push(`${label}: ${treeField} ${artifactPath(outDir, entry[treeField])} ${tree.reason}`);
+      incomplete.push(...artifactFreshnessProblems(`${label}: ${treeField} ${artifactPath(outDir, entry[treeField])}`, tree, runMetadata, maxEvidenceAgeMs));
       if (tree.valid) {
         treeTexts.push(await fs.readFile(tree._absolutePath, "utf8"));
       }
@@ -385,6 +472,8 @@ async function main() {
         label,
         screenshot: entry.screenshot ? artifactPath(outDir, entry.screenshot) : null,
         tree: entry[treeField] ? artifactPath(outDir, entry[treeField]) : null,
+        screenshotHash: image?.sha256 || null,
+        treeHash: tree?.sha256 || null,
       });
     }
   }
@@ -395,6 +484,8 @@ async function main() {
   } else {
     const usedProfileScreenshots = new Set();
     const usedProfileTrees = new Set();
+    const usedProfileScreenshotHashes = new Set();
+    const usedProfileTreeHashes = new Set();
     for (const profile of requiredProfiles) {
       if (coveredProfiles.has(profile)) continue;
       const notApplicable = notApplicableProfiles.get(profile);
@@ -432,14 +523,20 @@ async function main() {
       const unique = candidates.find((candidate) =>
         candidate.screenshot &&
         candidate.tree &&
+        candidate.screenshotHash &&
+        candidate.treeHash &&
         !usedProfileScreenshots.has(candidate.screenshot) &&
-        !usedProfileTrees.has(candidate.tree)
+        !usedProfileTrees.has(candidate.tree) &&
+        !usedProfileScreenshotHashes.has(candidate.screenshotHash) &&
+        !usedProfileTreeHashes.has(candidate.treeHash)
       );
       if (!unique) {
-        incomplete.push(`required profile lacks unique screenshot/tree evidence: ${profile}`);
+        incomplete.push(`required profile lacks unique screenshot/tree evidence and artifact hashes: ${profile}`);
       } else {
         usedProfileScreenshots.add(unique.screenshot);
         usedProfileTrees.add(unique.tree);
+        usedProfileScreenshotHashes.add(unique.screenshotHash);
+        usedProfileTreeHashes.add(unique.treeHash);
       }
     }
   }
@@ -452,14 +549,29 @@ async function main() {
   for (const logPath of logPaths) {
     const log = await inspectLogArtifact(logPath, outDir);
     evidence.logs.push(artifactPublic(log));
-    if (!log.exists) incomplete.push(`logs: ${artifactPath(outDir, logPath)} ${log.reason}`);
-    else if (log.crashSignature) blockers.push(`logs: ${artifactPath(outDir, logPath)} contains crash signature`);
+    if (!log.exists) {
+      incomplete.push(`logs: ${artifactPath(outDir, logPath)} ${log.reason}`);
+    } else if (log.crashSignature) {
+      blockers.push(`logs: ${artifactPath(outDir, logPath)} contains crash signature`);
+    }
+    incomplete.push(...artifactFreshnessProblems(`logs: ${artifactPath(outDir, logPath)}`, log, runMetadata, maxEvidenceAgeMs));
   }
 
   for (const blocker of report.blockers || []) blockers.push(sanitizeStringForOutput(String(blocker), outDir));
   for (const warning of report.warnings || []) warnings.push(sanitizeStringForOutput(String(warning), outDir));
 
   const status = blockers.length ? "fail" : incomplete.length ? "incomplete" : "pass";
+  const nativeEvidenceHash = stableHash(stableStringify({
+    platform,
+    run: {
+      qaRunId: runMetadata.qaRunId,
+      appBuildId: runMetadata.appBuildId,
+      startedAt: runMetadata.startedAt,
+      finishedAt: runMetadata.finishedAt,
+      toolingHash: runMetadata.toolingHash,
+    },
+    evidence,
+  }), 16);
   const qa = {
     generatedAt: new Date().toISOString(),
     tool: "native-qa-report",
@@ -474,6 +586,8 @@ async function main() {
     coveredProfiles: [...coveredProfiles].sort(),
     claimedProfiles: [...claimedProfiles].sort(),
     notApplicableProfiles: [...notApplicableProfiles.keys()].sort(),
+    runMetadata: artifactPublic(runMetadata),
+    nativeEvidenceHash,
     evidence,
     acceptanceReady: status === "pass" && !args.partial,
   };

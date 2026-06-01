@@ -24,12 +24,18 @@
     "test/"
   ],
   "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "verify": "node scripts/verify.mjs",
     "test": "node --test",
     "discover": "node scripts/discover-states.mjs",
     "render-check": "node scripts/render-check.mjs",
     "dom-audit": "node scripts/dom-audit.mjs",
     "visual-audit": "node scripts/visual-consistency-audit.mjs",
     "qa-report": "node scripts/qa-report.mjs",
+    "qa:web": "node scripts/run-web-qa.mjs",
+    "qa:web:final": "node scripts/run-web-qa.mjs --final",
+    "qa:native:ios": "node scripts/run-native-qa.mjs --platform native-ios",
+    "qa:native:android": "node scripts/run-native-qa.mjs --platform native-android",
     "native-qa-report": "node scripts/native-qa-report.mjs",
     "smoke:web": "node scripts/smoke-web.mjs",
     "smoke:native": "node scripts/smoke-native.mjs",

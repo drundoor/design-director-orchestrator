@@ -10,6 +10,11 @@ Use external references only after a local brief exists. Separate broad learning
 
 The important rule is not a fixed count. The rule is that no reference may override local truth, accessibility, data semantics, user anti-goals, or the design system.
 
+When the user asks for inspiration, design-library research, or GitHub skill
+research, use `references/research-and-inspiration.md` for the ledger and
+license workflow. Do not vendor code, assets, templates, fonts, or third-party
+skills until the exact license and allowed use have been recorded.
+
 ## S0: Local Truth
 
 Mandatory before outside references:

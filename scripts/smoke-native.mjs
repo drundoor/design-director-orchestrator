@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { stableHash, stableStringify } from "./lib/browser-utils.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -30,21 +31,29 @@ async function writeJson(file, value) {
 
 async function main() {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "design-director-native-smoke-"));
-  for (const name of ["home-light", "home-dark", "home-large", "home-keyboard"]) {
-    await fs.writeFile(path.join(out, `${name}.png`), pngBytes());
-    await fs.writeFile(path.join(out, `${name}-hierarchy.json`), JSON.stringify({ windows: [] }));
+  for (const [index, name] of ["home-light", "home-dark", "home-large", "home-keyboard"].entries()) {
+    const image = pngBytes();
+    image[30] = index + 1;
+    await fs.writeFile(path.join(out, `${name}.png`), image);
+    await fs.writeFile(path.join(out, `${name}-hierarchy.json`), JSON.stringify({ windows: [], state: name }));
   }
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
   const reportPath = path.join(out, "native-ios-qa.json");
+  const tooling = { commandsOrToolCalls: ["smoke fixture"] };
   await writeJson(reportPath, {
     platform: "native-ios",
+    qaRunId: "smoke-native-ios",
+    appBuildId: "smoke-native-build",
+    startedAt: new Date(Date.now() - 1000).toISOString(),
+    finishedAt: new Date(Date.now() + 1000).toISOString(),
+    toolingHash: stableHash(stableStringify(tooling), 16),
     target: {
       workspace: "Smoke.xcworkspace",
       scheme: "Smoke",
       simulator: "iPhone 16",
       osVersion: "latest"
     },
-    tooling: { commandsOrToolCalls: ["smoke fixture"] },
+    tooling,
     matrix: [
       {
         state: "home-light",

@@ -27,6 +27,7 @@ Run `design-director` only for multi-skill, high-risk, or validation-heavy desig
 | Native iOS | iOS/HIG specialist or local iOS design owner plus `references/platforms-ios.md` | Codex/iOS code | simulator screenshots, UI hierarchy, Dynamic Type, accessibility |
 | Native Android | Android/Material/Compose owner plus `references/platforms-android.md` | Codex/Android code | emulator screenshots, UI tree, font scale, accessibility |
 | Cross-platform app | platform-specific owner per runtime | Codex code per runtime | separate QA contract per platform |
+| New site/app build | Design Director owns brief, style, reference discipline, and QA gates | `frontend-app-builder`, Codex, native builder, or platform specialist | platform-specific rendered/native QA |
 | Final QA only | `frontend-testing-debugging` | none unless bugs found | QA ledger |
 
 ## Exit Routes
@@ -35,4 +36,11 @@ Run `design-director` only for multi-skill, high-risk, or validation-heavy desig
 - Data chart correctness: use `data-visualization` directly.
 - Icon search/replacement: use `better-icons` directly.
 - Rendered bug/debug: use `frontend-testing-debugging` directly.
-- Greenfield app build: use `frontend-app-builder` directly unless design risk is high.
+- Greenfield implementation after brief: use `frontend-app-builder` or the platform builder for code, while Design Director keeps ownership of the style brief, references, and final QA gates.
+
+## Native QA Contract Boundary
+
+Native iOS and Android evidence is not a web QA fallback. Use the native report
+contracts, simulator/emulator screenshots, hierarchy/tree captures, logs, run
+metadata, and artifact hashes. Validate with `npm run qa:native:ios` or
+`npm run qa:native:android`.

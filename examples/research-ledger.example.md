@@ -1,0 +1,48 @@
+# Research Ledger Example
+
+```yaml
+references:
+  - source: "https://github.com/radix-ui/primitives"
+    type: "component library"
+    reputation_signal: "widely used unstyled accessibility-focused primitives with public maintenance history"
+    license: "MIT"
+    allowed_use: "dependency"
+    why_relevant: "dropdown, dialog, popover, and focus behavior for a dense web app"
+    extract: "use robust primitives for keyboard and layering behavior"
+    do_not_copy: "marketing site visual styling"
+    local_mapping: "filter menu, command palette, detail modal"
+    verification_gate: "keyboard open/navigate/close, focus return, z-index audit"
+
+  - source: "https://practicaltypography.com/"
+    type: "inspiration site"
+    reputation_signal: "long-standing typography reference used by designers and writers"
+    license: "not found for reuse"
+    allowed_use: "link only"
+    why_relevant: "dense reading hierarchy and line-length judgment"
+    extract: "shorter measure for prose, tighter hierarchy for repeated records"
+    do_not_copy: "text, examples, page layout, or visual identity"
+    local_mapping: "settings/help panel typography rules"
+    verification_gate: "mobile and desktop screenshot review for line length and hierarchy"
+
+  - source: "https://example.invalid/paid-ui-kit"
+    type: "asset/template"
+    reputation_signal: "unknown"
+    license: "not found"
+    allowed_use: "do not use"
+    why_relevant: "visual style looked adjacent to the requested direction"
+    extract: "none"
+    do_not_copy: "all assets, templates, previews, and layout"
+    local_mapping: "rejected"
+    verification_gate: "no files or styles are imported from this source"
+
+  - source: "https://github.com/example/design-agent-skill"
+    type: "GitHub skill"
+    reputation_signal: "active repo with examples; license must be verified before reuse"
+    license: "Apache-2.0"
+    allowed_use: "code reference"
+    why_relevant: "contains useful critique checklist for mobile app flows"
+    extract: "adapt the concept of mobile-state walkthroughs"
+    do_not_copy: "skill files, branding, examples, or prompt text without attribution and review"
+    local_mapping: "optional peer-skill reference, not bundled"
+    verification_gate: "repo license file retained in ledger before any dependency or vendoring decision"
+```

@@ -13,6 +13,7 @@ evidence, not a checklist claim.
 - content size category
 - orientation and windowing mode when relevant
 - command or tool call used to build/run/capture
+- `qaRunId`, `startedAt`, `finishedAt`, `toolingHash`, and optional `appBuildId`
 
 ## Preferred Tool Flow
 
@@ -37,9 +38,10 @@ xcrun simctl ui booted appearance dark
 
 Use `examples/native-ios-qa.example.json` as the minimum structure and
 `schemas/native-ios-qa.schema.json` when your editor or CI supports JSON Schema.
-Then run `scripts/native-qa-report.mjs --report <report> --out .design-director`.
-Missing screenshots, UI hierarchy captures, logs, or tooling metadata are not
-acceptance evidence.
+Then run `scripts/native-qa-report.mjs --report <report> --out
+.design-director` or `npm run qa:native:ios -- --report <report>`. Missing
+screenshots, UI hierarchy captures, logs, run metadata, artifact hashes, or
+tooling metadata are not acceptance evidence.
 
 Required profile coverage is inferred from concrete metadata, not from
 `profile` or `profiles` labels alone. For standard QA, light, dark, large text,
@@ -49,3 +51,8 @@ profile needs unique screenshot and UI hierarchy evidence. Use
 `notApplicableProfiles` only
 with a reason and hierarchy evidence that proves a profile is irrelevant, such
 as a read-only screen with no editable fields.
+
+The validator hashes screenshots, hierarchy captures, and logs, records
+`nativeEvidenceHash`, rejects stale artifacts, and rejects files modified after
+the report `finishedAt`. Capture evidence first, set `finishedAt` after capture,
+then run the validator.

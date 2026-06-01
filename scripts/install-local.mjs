@@ -118,7 +118,7 @@ async function main() {
   }
 
   console.log(`install-local: installed ${args.mode} at ${target}`);
-  console.log("install-local: next steps: run `npm install`, `npx playwright install chromium`, and `npm test` in the repository.");
+  console.log("install-local: next steps: run `npm run setup` and `npm run verify` in the repository.");
 }
 
 main().catch((error) => {

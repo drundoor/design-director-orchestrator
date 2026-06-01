@@ -21,6 +21,11 @@ mismatch allowances, evidence-only reports, and partial reports are not final
 acceptance. Static pages may use `qaMode: "final-static"` only when the DOM
 audit proves there are no visible interactive controls.
 
+Final native acceptance requires `native-design-qa.json.status` to be `pass`
+and `acceptanceReady` to be `true`, with `qaRunId`, `startedAt`, `finishedAt`,
+`toolingHash`, fresh screenshots, UI hierarchy/tree captures, logs, unique
+profile evidence, and `nativeEvidenceHash` recorded by the validator.
+
 ## Default Viewports
 
 - 320
@@ -56,7 +61,7 @@ Use fewer only when the surface clearly does not need them, and record why.
   pass/fail, issues, and waiver/evidence fields filled in.
 - Focused-state screenshots for any component or section with recent user complaints, dense generated labels, popovers, overlays, charts, counters, markers, or small repeated controls. Full-page screenshots alone are not sufficient for those areas.
 - State discovery output or a recorded waiver. For rendered web targets, run `scripts/discover-states.mjs` before final QA unless the page is static or the user explicitly limited scope. Discovery must be fresh, share the configured run identity, and include `discoveryHash`. Use `qa-report.mjs --static` only when the page has no relevant interactive states; use `--partial` only for draft reports, never acceptance.
-- State coverage dispositions for discovered but unrendered candidates. Non-rendered dispositions require a reason; `waived`, `duplicate`, and `low-value` also require evidence. The state-coverage file must be fresh and bind to the current discovery via `discoveryHash` or same-run metadata.
+- State coverage dispositions for discovered but unrendered candidates. Non-rendered dispositions require a reason; `waived`, `duplicate`, and `low-value` also require evidence. High-confidence safe candidates rejected as `not-relevant` also require evidence inside `.design-director`; only destructive or sensitive rejections may be evidence-free, and they still need a reason. The state-coverage file must be fresh and bind to the current discovery via `discoveryHash` or same-run metadata.
 - Visual consistency audit for repeated components: peer typography, slot alignment, local spacing rhythm, media/title anchoring, attached-control width, and affordance clarity.
 - Overlay stacking audit for open dropdown/listbox/popover states: sampled points inside the overlay must resolve to the overlay or its descendants with `elementFromPoint`, and the overlay must not be clipped by the viewport.
 - Interaction tool evidence: use the Browser plugin for local web targets, Chrome plugin for deployed/authenticated/profile-dependent pages or explicit Chrome requests, and Computer Use only when browser tools cannot exercise the surface. Record the tool and active states used in screenshot notes or QA notes.
@@ -104,3 +109,4 @@ A design pass is accepted only when:
 11. `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
 12. No blocker remains unwaived.
 13. Any waiver includes evidence and reason, and no valid waiver is stale or unused.
+14. Native QA, when applicable, has fresh run metadata, artifact hashes, and unique screenshot/tree evidence per required profile.

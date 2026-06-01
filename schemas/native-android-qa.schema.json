@@ -3,11 +3,16 @@
   "$id": "https://github.com/drundoor/design-director-orchestrator/blob/main/schemas/native-android-qa.schema.json",
   "title": "Design Director Native Android QA Report",
   "type": "object",
-  "required": ["platform", "target", "tooling", "matrix", "checks", "logs"],
+  "required": ["platform", "qaRunId", "startedAt", "finishedAt", "toolingHash", "target", "tooling", "matrix", "checks", "logs"],
   "additionalProperties": true,
   "properties": {
     "$schema": { "type": "string" },
     "platform": { "const": "native-android" },
+    "qaRunId": { "type": "string", "minLength": 1 },
+    "appBuildId": { "type": "string", "minLength": 1 },
+    "startedAt": { "type": "string", "minLength": 1 },
+    "finishedAt": { "type": "string", "minLength": 1 },
+    "toolingHash": { "type": "string", "minLength": 1 },
     "target": {
       "type": "object",
       "required": ["module", "variant", "device", "apiLevel"],

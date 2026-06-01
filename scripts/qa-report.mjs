@@ -640,9 +640,10 @@ async function dispositionProblems(candidate, disposition, { outDir, rendered })
   }
   if (value === "rejected") {
     const rejectionRisk = disposition.risk || disposition.rejectionRisk;
-    const acceptableRisk = ["destructive", "sensitive", "not-relevant"].includes(rejectionRisk);
-    if (!evidence && !acceptableRisk) {
-      problems.push(`state-coverage rejected disposition for ${candidate.kind} ${candidate.selector} requires evidence or risk destructive|sensitive|not-relevant`);
+    const evidenceFreeRisk = ["destructive", "sensitive"].includes(rejectionRisk);
+    const highConfidenceSafe = candidate.confidence === "high" && (candidate.mutationRisk || "safe") === "safe";
+    if (!evidence && (!evidenceFreeRisk || rejectionRisk === "not-relevant" || highConfidenceSafe)) {
+      problems.push(`state-coverage rejected disposition for ${candidate.kind} ${candidate.selector} requires evidence unless risk is destructive or sensitive`);
     }
   }
   if (value === "rendered" && !rendered && !evidence) {
@@ -890,6 +891,36 @@ function sanitizeForOutput(value, outDir) {
     return result;
   }
   return sanitizeStringForOutput(value, outDir);
+}
+
+function warningCategory(message) {
+  if (/console warning/i.test(message)) return "console";
+  if (/visual consistency|typography|alignment|spacing|camouflaged|overlay|occlud|clipped overlay/i.test(message)) return "visual-consistency";
+  if (/clipped|tiny text|small tap target|unlabeled focusable|hover-only/i.test(message)) return "dom";
+  if (/waived/i.test(message)) return "waivers";
+  if (/final URL|mixed|brief|evidence/i.test(message)) return "evidence";
+  return "other";
+}
+
+function groupedWarnings(warnings) {
+  const groups = new Map();
+  for (const warning of warnings) {
+    const category = warningCategory(warning);
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(warning);
+  }
+  return [...groups.entries()].map(([category, items]) => ({ category, count: items.length, items }));
+}
+
+function likelyVisualIssues(warnings, limit = 5) {
+  const priority = [/overlay|occlud|behind|z-index|clipped/i, /camouflaged|same color|contrast/i, /typography|font|peer/i, /alignment|spacing|width|anchoring/i, /small tap target|tiny text/i];
+  const scored = warnings
+    .map((warning, index) => {
+      const bucket = priority.findIndex((pattern) => pattern.test(warning));
+      return { warning, index, score: bucket === -1 ? 99 : bucket };
+    })
+    .sort((left, right) => left.score - right.score || left.index - right.index);
+  return scored.slice(0, limit).map((item) => item.warning);
 }
 
 async function main() {
@@ -1285,6 +1316,11 @@ async function main() {
     blockers,
     incomplete,
     warnings,
+    warningSummary: {
+      groups: groupedWarnings(warnings),
+      topLikelyIssues: likelyVisualIssues(warnings),
+      promotionHint: "Promote a warning to a blocker when screenshot review, a user complaint, or a core task path confirms visible design harm.",
+    },
     screenshotCount: screenshots.length,
     screenshotNotesPath: notesArtifact.exists ? artifactPath(outDir, notesPath) : null,
     stateDiscoveryPath: discoveryArtifact.exists ? artifactPath(outDir, discoveryArtifact.path) : null,
@@ -1325,6 +1361,18 @@ ${bullet(incomplete)}
 ## Warnings
 
 ${bullet(warnings)}
+
+## Warning Summary
+
+Top likely visual issues:
+
+${bullet(qa.warningSummary.topLikelyIssues)}
+
+Grouped warning counts:
+
+${bullet(qa.warningSummary.groups.map((group) => `${group.category}: ${group.count}`))}
+
+Promotion hint: ${qa.warningSummary.promotionHint}
 
 ## Screenshot Manifest
 

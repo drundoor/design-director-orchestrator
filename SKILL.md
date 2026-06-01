@@ -29,6 +29,7 @@ Exit and use a specialist directly when:
 ## Protocol
 
 1. Classify intent and platform/surface. See `references/modes.md`.
+   For new site/app creation, treat the job as `concept -> implement -> QA` unless the user asks for only one phase. Map ordinary words such as check, fix, redesign, build, inspiration, style, and final QA through `references/modes.md`.
 2. Read local truth before outside references. See `references/intake.md`.
 3. Classify source of truth in priority order:
    1. Accessibility, keyboard, touch, reduced motion, legal/safety constraints.
@@ -110,5 +111,7 @@ Use scripts only when there is a real rendered target:
 - `scripts/visual-consistency-audit.mjs`: collects peer typography, spacing, alignment, media-card anchoring, related-width, camouflaged-control, and overlay stacking candidates after configured active-state actions.
 - `scripts/discover-states.mjs`: scans a rendered page and emits a draft active-state config with confidence and mutation-risk labels.
 - `scripts/qa-report.mjs`: merges evidence into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
+- `scripts/run-web-qa.mjs`: one-command web QA wrapper for draft or final runs.
+- `scripts/run-native-qa.mjs`: one-command native report validator wrapper.
 
 These scripts are evidence collectors. They do not replace judgment or specialist skills.

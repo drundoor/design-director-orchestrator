@@ -1,5 +1,10 @@
 {
   "platform": "native-ios",
+  "qaRunId": "ios-qa-2026-06-01T120000Z",
+  "appBuildId": "ios-debug-build-123",
+  "startedAt": "2026-06-01T12:00:00.000Z",
+  "finishedAt": "2026-06-01T12:12:00.000Z",
+  "toolingHash": "replace-with-hash-from-native-qa-report-error-or-helper",
   "target": {
     "workspace": "App.xcworkspace",
     "scheme": "App",
