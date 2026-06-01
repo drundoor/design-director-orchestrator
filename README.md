@@ -7,58 +7,51 @@ when evidence is stale or incomplete.
 
 Use it when a design bug made it to review, when a page needs a real revamp, or
 when you want a new interface built with QA baked in from the start.
+It is for work where "functional but bland" is not good enough.
 
 ## What It Does
 
-- Audits web, iOS, Android, game/canvas, dashboard, and data-viz surfaces.
-- Creates a brief with source truth, anti-goals, references, owners, and gates.
-- Sets a design thesis and surface quality bar for revamps and new builds, so
-  "functional but bland" does not pass as finished design.
-- Requires a compact style commitment for broad work: what the first viewport,
-  layout, typography, color/material, and rejected generic pattern will look
-  like before implementation starts.
-- Routes broad web/front-end design work through Impeccable by default, then
-  picks the right command for the job: `craft`, `polish`, `bolder`, `layout`,
-  `typeset`, `adapt`, `harden`, `clarify`, `colorize`, or `animate`.
-  New web builds usually start with `impeccable craft`; existing redesigns
-  usually start with `impeccable polish`, then add narrower commands as needed.
-- Requires Impeccable execution evidence for broad web/front-end work. Naming a
-  route is not enough; the brief or QA notes must say what was actually loaded,
-  run, or explicitly waived.
-- Keeps standalone mockups and benchmark artifacts in isolated output folders
-  unless you name an existing product route or component to modify.
-- Runs lean design-element exploration by default: a small mix of correctness,
-  domain, and taste/art-direction references. If you want a large inspiration or
-  source-curation pass, ask for `deep design exploration`.
-- Checks active states: dropdowns, search suggestions, popovers, dialogs,
-  drawers, charts, tabs, mobile nav, and details panels.
-- Catches practical UI failures: clipped overlays, hidden controls, tiny text,
-  horizontal overflow, weak focus paths, stale screenshots, inconsistent fonts,
-  spacing drift, and missing reduced-motion paths.
-- Records outside inspiration with license, allowed use, and do-not-copy rules
-  before it can shape implementation.
+### Directs The Work
+
+- Turns visual requests into a brief with source truth, anti-goals, a design
+  thesis, a surface quality bar, and acceptance gates.
+- Chooses the right flow: `audit`, `repair`, `revamp`, `concept`, `study`,
+  `create`, or `qa`.
+
+### Raises Visual Quality
+
+- Routes broad web/front-end work through Impeccable by default, then records
+  what actually ran or what the user explicitly waived.
+- Requires a style posture, signature move, first-viewport consequence, and
+  rejected generic pattern before broad implementation starts.
+
+### Uses References Lawfully
+
+- Runs lean design-element exploration by default: one correctness source, one
+  domain source, and one taste/art-direction source.
+- Records license, allowed use, and do-not-copy notes before any outside
+  reference shapes the implementation. Larger source-curation passes are opt-in
+  with `deep design exploration`.
+
+### Verifies Real UI States
+
+- Opens the app and checks active states like dropdowns, search suggestions,
+  popovers, dialogs, drawers, tabs, charts, and mobile navigation.
+- Fails final QA for stale evidence, hidden overlays, clipped text, font drift,
+  spacing drift, overflow, focus issues, and missing responsive coverage.
 
 For a tiny CSS fix, use the normal coding flow. For anything visual that can
 break across states, screens, or platforms, use this.
 
-## Ask It Like This
+## How To Prompt The Skill
 
-Plain language is enough. Useful prompts:
+Plain language is enough:
 
-- "Check this UI for design problems. Do not change code."
-- "Fix this visual bug and verify it on mobile and desktop."
-- "Make this page look much better, but preserve the product behavior."
-- "Give me three design directions before writing code."
-- "Build a new marketing site for this product and guide the visual direction."
-- "Create a new dashboard from this data and make a distinct operations tool, not a generic SaaS mockup."
-- "Create a static dashboard mockup for a support queue manager."
-- "Run a deep design exploration first: find references, propose directions, then recommend one before implementation."
-- "Use these screenshots as inspiration, but do not copy their layout or assets."
-- "Research reputable open-source UI libraries and design skills we can lawfully reference for this app; do not copy assets."
-- "Redesign this iPhone screen and run native iOS QA with dark mode and Dynamic Type."
-- "Audit this Android Compose screen with font scale, dark theme, and IME states."
-- "Improve this game/canvas UI and verify input, overlays, and canvas bounds."
-- "Run final design QA and tell me whether it is acceptance ready."
+- "Audit this UI. Do not change code."
+- "Repair this visual bug and verify it on mobile and desktop."
+- "Revamp this dashboard, preserve behavior, and make a strong style choice."
+- "Build a new marketing page from this brief and run final design QA."
+- "Run deep design exploration first, then recommend one direction."
 
 You can also name the flow directly:
 
@@ -88,6 +81,7 @@ every secondary command triggered by the request. Final QA rejects blank routes
 and mechanically checks the highest-signal combinations: greenfield web work
 needs `craft`, open-ended greenfield work adds `bolder`, broad redesigns need
 `polish`, and dashboard/data-heavy/dense surfaces need `layout` plus `typeset`.
+For a new web build, the route usually starts with `impeccable craft`.
 The brief must also include
 `Impeccable execution` evidence. The full routing rules live in
 `references/routing.md`.

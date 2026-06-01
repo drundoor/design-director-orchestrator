@@ -4,7 +4,8 @@
   "screenshotNotesHash": "sha256-of-current-screenshot-notes-md",
   "reviewedScreenshotHashes": {
     "screenshots/default-375x700.png": "sha256-of-current-mobile-screenshot",
-    "screenshots/default-1440x1000.png": "sha256-of-current-desktop-screenshot"
+    "screenshots/default-1440x1000.png": "sha256-of-current-desktop-screenshot",
+    "screenshots/primary-chart-375x220.png": "sha256-of-current-focused-chart-screenshot"
   },
   "design_quality_gate": {
     "applies": true,
@@ -18,35 +19,40 @@
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "stylePostureExpressed": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "signatureMoveVisible": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "styleCommitmentHonored": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "genericScaffoldAvoided": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "reviewerNotes": "Inspected current mobile and desktop screenshots from the same QA run. The first viewport no longer reads as a generic scaffold."

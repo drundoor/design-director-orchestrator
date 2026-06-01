@@ -20,6 +20,8 @@
     "allowFinalUrlMismatch": { "type": "boolean" },
     "allowMixedEvidence": { "type": "boolean" },
     "requireBrief": { "type": "boolean" },
+    "designQualityRequired": { "type": "boolean" },
+    "designQualityReason": { "type": "string", "minLength": 1 },
     "evidenceMode": {
       "enum": ["final", "evidence-only", "partial", "static"]
     },

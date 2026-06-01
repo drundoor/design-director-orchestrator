@@ -14,6 +14,7 @@ const REQUIRED_NOTE_FIELDS = [
   "Issues found",
   "Waiver/evidence",
 ];
+const MAX_CLOCK_SKEW_MS = 2 * 60 * 1000;
 
 function parseArgs(argv) {
   const args = { out: ".design-director" };
@@ -138,6 +139,13 @@ function artifactPath(outDir, file) {
 
 function absoluteLike(value) {
   return path.isAbsolute(String(value || "")) || /^[A-Za-z]:[\\/]/.test(String(value || ""));
+}
+
+function parentTraversalLike(value) {
+  return String(value || "")
+    .replaceAll("\\", "/")
+    .split("/")
+    .includes("..");
 }
 
 function normalizeUrl(value) {
@@ -809,6 +817,7 @@ function staticControlsFromDom(dom) {
 
 function artifactFreshness(artifacts, maxAgeMs) {
   const present = artifacts.filter((artifact) => artifact.result.exists);
+  const now = Date.now();
   const hashes = new Set(present.map((artifact) => artifact.result.data?.configHash).filter(Boolean));
   const baseUrls = new Set(present.map((artifact) => normalizeUrl(artifact.result.data?.baseUrl)).filter((url) => url !== "unknown-url"));
   const configuredRunIds = new Set(
@@ -824,12 +833,28 @@ function artifactFreshness(artifacts, maxAgeMs) {
       .map((artifact) => artifact.result.data?.qaRunId)
       .filter(Boolean)
   );
-  const times = present.flatMap((artifact) => [artifact.result.data?.startedAt, artifact.result.data?.finishedAt || artifact.result.data?.generatedAt])
-    .map((value) => Date.parse(value))
+  const timestampRecords = present.flatMap((artifact) =>
+    ["startedAt", "finishedAt", "generatedAt"].map((field) => ({
+      artifact: artifact.name,
+      field,
+      value: artifact.result.data?.[field],
+      timestamp: Date.parse(artifact.result.data?.[field]),
+    }))
+  ).filter((record) => Number.isFinite(record.timestamp));
+  const futureTimestamps = timestampRecords
+    .filter((record) => record.timestamp - now > MAX_CLOCK_SKEW_MS)
+    .map((record) => ({
+      artifact: record.artifact,
+      field: record.field,
+      value: record.value,
+      skewMs: record.timestamp - now,
+    }));
+  const times = timestampRecords
+    .map((record) => record.timestamp)
     .filter((value) => Number.isFinite(value));
   const earliest = times.length ? Math.min(...times) : null;
   const latest = times.length ? Math.max(...times) : null;
-  const latestAgeMs = latest ? Math.max(0, Date.now() - latest) : null;
+  const latestAgeMs = latest ? Math.max(0, now - latest) : null;
   return {
     artifacts: present.map((artifact) => ({
       name: artifact.name,
@@ -853,6 +878,7 @@ function artifactFreshness(artifacts, maxAgeMs) {
     latest: latest ? new Date(latest).toISOString() : null,
     spanMs: earliest && latest ? latest - earliest : null,
     latestAgeMs,
+    futureTimestamps,
     maxAgeMs,
   };
 }
@@ -863,6 +889,14 @@ function artifactLatestAgeMs(data = {}) {
     .filter((value) => Number.isFinite(value));
   if (!times.length) return null;
   return Math.max(0, Date.now() - Math.max(...times));
+}
+
+function artifactFutureTimestampProblems(name, data = {}) {
+  const now = Date.now();
+  return ["startedAt", "finishedAt", "generatedAt"]
+    .map((field) => ({ field, value: data[field], timestamp: Date.parse(data[field]) }))
+    .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp - now > MAX_CLOCK_SKEW_MS)
+    .map((entry) => `${name}.json ${entry.field} timestamp is in the future beyond allowed clock skew: ${entry.value}`);
 }
 
 function artifactSpanAgainst(data = {}, freshness = {}) {
@@ -1005,6 +1039,10 @@ async function validateEvidenceFileReference(outDir, reference, label, incomplet
     incomplete.push(`${label} evidence path is empty`);
     return null;
   }
+  if (parentTraversalLike(parsed.file)) {
+    incomplete.push(`${label} must not use parent-directory traversal: ${ref}`);
+    return null;
+  }
   const insideOutDir = evidencePathInside(outDir, parsed.file);
   const outputPath = insideOutDir ? resolveEvidencePath(outDir, parsed.file) : path.resolve(parsed.file);
   if (!insideOutDir && options.outputOnly !== false) {
@@ -1077,6 +1115,17 @@ async function peerExecutionEvidenceProblems(outDir, name, peerSkill = {}) {
   if (!sectionHasOutcome) {
     incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence section must record what was loaded, run, checked, or applied`);
   }
+  const expectedOutcomes = [...commands, ...checks].map((item) => String(item || "").trim()).filter(Boolean);
+  for (const item of expectedOutcomes) {
+    const spaced = item.replace(/([a-z])([A-Z])/g, "$1 $2");
+    const singular = item.endsWith("s") ? item.slice(0, -1) : item;
+    const spacedSingular = singular.replace(/([a-z])([A-Z])/g, "$1 $2");
+    const aliases = [...new Set([item, spaced, singular, spacedSingular])].map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"));
+    const pattern = new RegExp(`(?:${aliases.join("|")})[\\s\\S]{0,160}\\b(pass|passed|check|checks|checked|complete|completed|loaded|run|ran|used|applied|reviewed|executed|n/a|not applicable)\\b`, "i");
+    if (!pattern.test(sectionText)) {
+      incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence section must record a filled outcome for ${item}`);
+    }
+  }
   return incomplete;
 }
 
@@ -1131,11 +1180,21 @@ async function validateLocalEvidence(outDir, references, label, incomplete) {
       incomplete.push(`${label} has an empty evidence reference`);
       continue;
     }
+    if (parentTraversalLike(parsed.file)) {
+      incomplete.push(`${label} must not use parent-directory traversal: ${entry}`);
+      continue;
+    }
     if (evidencePathInside(outDir, parsed.file)) {
       if (!(await pathExists(resolveEvidencePath(outDir, parsed.file)))) incomplete.push(`${label} evidence path does not exist: ${entry}`);
       continue;
     }
     const repoRelative = path.resolve(parsed.file);
+    const repoRoot = process.cwd();
+    const relative = path.relative(repoRoot, repoRelative);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+      incomplete.push(`${label} evidence must stay inside the repository root: ${entry}`);
+      continue;
+    }
     if (!(await pathExists(repoRelative))) incomplete.push(`${label} evidence path does not exist: ${entry}`);
   }
 }
@@ -1292,22 +1351,26 @@ async function validateDesignEvidenceReferences({
   return cited;
 }
 
-function evidenceCoverageProblems(citedPaths, screenshots, briefText, incomplete, warnings) {
+function evidenceCoverageProblems(citedPaths, screenshots, briefText, surfaceText, incomplete, warnings) {
   const cited = new Set(citedPaths);
   const citedScreenshots = screenshots.filter((screenshot) => cited.has(screenshot.path));
   const hasMobile = citedScreenshots.some((screenshot) => Number(screenshot.viewport?.width || 0) && Number(screenshot.viewport.width) <= 700);
   const hasDesktop = citedScreenshots.some((screenshot) => Number(screenshot.viewport?.width || 0) >= 900);
   if (!hasMobile) incomplete.push("design-quality.json evidence must include at least one mobile/narrow screenshot for broad final design QA");
   if (!hasDesktop) incomplete.push("design-quality.json evidence must include at least one desktop/wide screenshot for broad final design QA");
-  if (/\b(dashboard|data-viz|data visualization|chart|table|decision)\b/i.test(briefText)) {
+  const evidenceContext = `${briefText || ""} ${surfaceText || ""}`;
+  if (/\b(dashboard|data-viz|data visualization|chart|table|analytics|report)\b/i.test(evidenceContext)) {
     const hasFocused = citedScreenshots.some((screenshot) => screenshot.type === "element" || /\b(chart|table|decision|dashboard|viz)\b/i.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`));
     if (!hasFocused) {
-      warnings.push("design-quality.json dashboard/data-viz work should include a chart, table, or decision-area focused screenshot evidence pointer");
+      incomplete.push("design-quality.json dashboard/data-viz work must include a chart, table, or decision-area focused screenshot evidence pointer");
     }
+  } else if (/\bdecision\b/i.test(evidenceContext)) {
+    const hasFocused = citedScreenshots.some((screenshot) => screenshot.type === "element" || /\b(decision|chart|table|dashboard|viz)\b/i.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`));
+    if (!hasFocused) warnings.push("design-quality.json decision-heavy work should include a focused screenshot evidence pointer when a specific decision area exists");
   }
 }
 
-async function validateDesignQualityArtifact({ artifact, gate, outDir, screenshots, screenshotNotes, notesPath, notesText, freshness, maxEvidenceAgeMs, briefText }) {
+async function validateDesignQualityArtifact({ artifact, gate, outDir, screenshots, screenshotNotes, notesPath, notesText, freshness, maxEvidenceAgeMs, briefText, surfaceText }) {
   const data = artifact.data || {};
   const incomplete = [];
   const blockers = [];
@@ -1345,6 +1408,8 @@ async function validateDesignQualityArtifact({ artifact, gate, outDir, screensho
   const generatedAt = Date.parse(data.generatedAt || data.generated_at || "");
   if (!Number.isFinite(generatedAt)) {
     incomplete.push("design-quality.json generatedAt is required and must be parseable");
+  } else if (generatedAt - Date.now() > MAX_CLOCK_SKEW_MS) {
+    incomplete.push("design-quality.json generatedAt is in the future beyond allowed clock skew; rerun final design-quality review with current screenshots");
   } else if (Date.now() - generatedAt > maxEvidenceAgeMs) {
     incomplete.push("design-quality.json generatedAt is stale; rerun final design-quality review with current screenshots");
   }
@@ -1383,7 +1448,7 @@ async function validateDesignQualityArtifact({ artifact, gate, outDir, screensho
   if (verdict.reviewEvidence || verdict.review_evidence) {
     incomplete.push("design-quality.json designQuality.reviewEvidence is legacy top-level evidence; provide per-verdict evidence arrays instead");
   }
-  evidenceCoverageProblems(citedEvidence, screenshots, briefText, incomplete, warnings);
+  evidenceCoverageProblems(citedEvidence, screenshots, briefText, surfaceText, incomplete, warnings);
   if (!String(verdict.reviewerNotes || verdict.reviewer_notes || "").trim()) {
     incomplete.push("design-quality.json designQuality.reviewerNotes is required");
   }
@@ -1436,10 +1501,12 @@ function extractBriefField(text, field) {
   return text.match(new RegExp(`^\\s*-?\\s*${escaped}\\s*:\\s*(.+)$`, "im"))?.[1]?.trim() || "";
 }
 
-function designQualityGateFor(briefText = "", designQualityData = null) {
+function designQualityGateFor(briefText = "", designQualityData = null, runConfig = {}) {
   const rawGate = designQualityData?.design_quality_gate || designQualityData?.designQualityGate || null;
   const explicitBriefRequired = /\bdesign\s*quality\s*required\s*:\s*true\b/i.test(briefText);
   const heuristicApplies = explicitBriefRequired || requiresDesignQualityGate(briefText);
+  const configRequired = typeof runConfig.designQualityRequired === "boolean" ? runConfig.designQualityRequired : null;
+  const configReason = String(runConfig.designQualityReason || runConfig.design_quality_reason || "").trim();
   if (rawGate && typeof rawGate.applies === "boolean") {
     return {
       explicit: true,
@@ -1447,6 +1514,17 @@ function designQualityGateFor(briefText = "", designQualityData = null) {
       reason: String(rawGate.reason || "").trim(),
       depth: String(rawGate.depth || rawGate.design_exploration_depth || "").trim().toLowerCase(),
       finalRequired: rawGate.final_required !== false && rawGate.finalRequired !== false,
+      peerSkills: designQualityData?.peerSkills || designQualityData?.peer_skills || {},
+      heuristicApplies,
+    };
+  }
+  if (configRequired !== null) {
+    return {
+      explicit: true,
+      applies: configRequired,
+      reason: configReason || (configRequired ? "required by render config" : ""),
+      depth: "",
+      finalRequired: true,
       peerSkills: designQualityData?.peerSkills || designQualityData?.peer_skills || {},
       heuristicApplies,
     };
@@ -1671,7 +1749,7 @@ async function main() {
   }
   const notesArtifact = await readTextArtifact(notesPath);
   const briefArtifact = await readTextArtifact(briefPath);
-  const designGate = designQualityGateFor(briefArtifact.text, designQualityArtifact.data);
+  const designGate = designQualityGateFor(briefArtifact.text, designQualityArtifact.data, renderArtifact.data || {});
 
   const blockers = [];
   const warnings = [];
@@ -1744,6 +1822,9 @@ async function main() {
     if (!artifact.qaRunId) addIncomplete(`${artifact.name}.json is missing qaRunId; rerun current audit scripts`, "evidence-freshness");
     if (!artifact.startedAt || !artifact.finishedAt) addIncomplete(`${artifact.name}.json is missing startedAt/finishedAt; rerun current audit scripts`, "evidence-freshness");
   }
+  for (const entry of freshness.futureTimestamps || []) {
+    addIncomplete(`${entry.artifact}.json ${entry.field} timestamp is in the future beyond allowed clock skew: ${entry.value}`, "evidence-freshness");
+  }
   const mixedEvidenceAllowed = Boolean(args.partial || args.allowMixedEvidence);
   if (freshness.hashes.length > 1) {
     const message = `web audit artifacts were produced from different configHash values: ${freshness.hashes.join(", ")}`;
@@ -1781,6 +1862,7 @@ async function main() {
 
   if (!args.static && discoveryArtifact.exists) {
     const discovery = discoveryArtifact.data || {};
+    for (const problem of artifactFutureTimestampProblems("discovered-states", discovery)) addIncomplete(problem, "state-discovery:freshness");
     if (!discovery.discoveryHash) addIncomplete("discovered-states.json is missing discoveryHash; rerun discover-states.mjs", "state-discovery:freshness");
     if (!artifactHasFreshnessMetadata(discovery)) addIncomplete("discovered-states.json is missing freshness/run metadata; rerun discover-states.mjs", "state-discovery:freshness");
     if (freshness.hashes.length === 1 && discovery.configHash && discovery.configHash !== freshness.hashes[0]) {
@@ -1816,6 +1898,7 @@ async function main() {
     const stateCoverage = stateCoverageArtifact.data || {};
     const items = stateCoverageItems(stateCoverage);
     if (items.length) {
+      for (const problem of artifactFutureTimestampProblems("state-coverage", stateCoverage)) addIncomplete(problem, "state-coverage:freshness");
       const discoveryHash = discoveryArtifact.data?.discoveryHash || null;
       if (stateCoverage.discoveryHash) {
         if (!discoveryHash) addIncomplete("state-coverage.json declares discoveryHash but discovered-states.json has no discoveryHash", "state-coverage:freshness");
@@ -2003,6 +2086,7 @@ async function main() {
     freshness,
     maxEvidenceAgeMs,
     briefText: briefArtifact.text,
+    surfaceText: `${render.platform || ""} ${render.surface || ""} ${render.qaProfile || ""}`,
   });
   for (const issue of designQuality.incomplete) addIncomplete(issue, "design-quality");
   for (const issue of designQuality.blockers) addBlocker(issue, "design-quality");

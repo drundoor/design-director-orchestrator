@@ -265,7 +265,9 @@ truth. Record the local design-system evidence and the taste decision derived
 from it. Do not browse merely to satisfy ceremony when local truth is stronger,
 but do record why local truth is enough. Local evidence must be a resolvable
 `.design-director` or repo-relative reference, not an absolute path from a
-developer machine.
+developer machine. Do not use `../` parent-directory traversal in local-system or deep
+exploration evidence; evidence paths must stay inside the QA output folder or
+the repository root.
 
 ## Structured Final Verdict
 
@@ -279,7 +281,8 @@ machine-readable contract that keeps the brief from passing on prose alone:
   "screenshotNotesHash": "sha256-of-current-screenshot-notes-md",
   "reviewedScreenshotHashes": {
     "screenshots/default-375x700.png": "sha256-of-current-mobile-screenshot",
-    "screenshots/default-1440x1000.png": "sha256-of-current-desktop-screenshot"
+    "screenshots/default-1440x1000.png": "sha256-of-current-desktop-screenshot",
+    "screenshots/primary-chart-375x220.png": "sha256-of-current-focused-chart-screenshot"
   },
   "design_quality_gate": {
     "applies": true,
@@ -293,35 +296,40 @@ machine-readable contract that keeps the brief from passing on prose alone:
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "stylePostureExpressed": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "signatureMoveVisible": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "styleCommitmentHonored": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "genericScaffoldAvoided": {
       "verdict": "pass",
       "evidence": [
         "screenshot-notes.md#screenshots/default-375x700.png",
-        "screenshot-notes.md#screenshots/default-1440x1000.png"
+        "screenshot-notes.md#screenshots/default-1440x1000.png",
+        "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
     "reviewerNotes": "Current mobile and desktop screenshots show the incident-room posture and signature move."
@@ -364,16 +372,24 @@ machine-readable contract that keeps the brief from passing on prose alone:
 All five `designQuality` verdicts must be `pass` for final acceptance. Each
 verdict must carry its own evidence array, every pointer must resolve to a
 current screenshot-note section, and `reviewedScreenshotHashes` must match the
-current screenshot files. Broad final web work needs at least one mobile/narrow
-and one desktop/wide screenshot. Dashboard or data-visualization work should
-also include focused chart, table, or decision-area evidence. Use
+current screenshot files. `generatedAt` must be current, parseable, and not in
+the future beyond normal clock skew. Broad final web work needs at least one
+mobile/narrow and one desktop/wide screenshot. Dashboard, report, table, chart,
+analytics, and data-visualization work must also include focused chart, table,
+or decision-area evidence. Use
 `applies: false` only for a small component repair, deliberately plain utility,
 or other narrow task, and record the reason.
 
+You can force the design-quality gate from `.design-director/render.config.json`
+with `designQualityRequired: true` and `designQualityReason`. Use
+`designQualityRequired: false` only for narrow repairs or deliberately plain
+utility, and include a reason.
+
 Peer-skill execution evidence must also be structured and resolvable:
 `executionEvidence.path` must point to a markdown section in the QA evidence
-folder that records what was loaded, run, checked, or applied. Plain text like
-`"Loaded Impeccable"` is not final acceptance evidence.
+folder that records what was loaded, run, checked, or applied for each listed
+command or check. Plain text like `"Loaded Impeccable"` is not final acceptance
+evidence.
 
 ## Surface Quality Bars
 

@@ -147,12 +147,17 @@ async function installPeer(peerName, peer, args, targetRoot, tempRoot) {
   }
 
   const cloneDir = path.join(tempRoot, peerName);
-  const cloneArgs = ["clone", "--depth", "1"];
-  if (peer.ref && !commitRef(peer.ref)) cloneArgs.push("--branch", peer.ref);
-  cloneArgs.push(peer.repo, cloneDir);
-  await run("git", cloneArgs, { timeout: 180000 });
   if (peer.ref && commitRef(peer.ref)) {
-    await run("git", ["checkout", "--detach", peer.ref], { cwd: cloneDir });
+    await fs.mkdir(cloneDir, { recursive: true });
+    await run("git", ["init", cloneDir], { timeout: 180000 });
+    await run("git", ["remote", "add", "origin", peer.repo], { cwd: cloneDir, timeout: 180000 });
+    await run("git", ["fetch", "--depth", "1", "origin", peer.ref], { cwd: cloneDir, timeout: 180000 });
+    await run("git", ["checkout", "--detach", "FETCH_HEAD"], { cwd: cloneDir, timeout: 180000 });
+  } else {
+    const cloneArgs = ["clone", "--depth", "1"];
+    if (peer.ref) cloneArgs.push("--branch", peer.ref);
+    cloneArgs.push(peer.repo, cloneDir);
+    await run("git", cloneArgs, { timeout: 180000 });
   }
 
   const license = await detectLicense(cloneDir, peer);

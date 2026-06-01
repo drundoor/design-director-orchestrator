@@ -223,5 +223,7 @@ export function qaRunMetadata(config = {}, effective = {}, startedAt = new Date(
     appBuildId,
     evidenceMode: config.evidenceMode || null,
     allowFinalUrlMismatch: Boolean(config.allowFinalUrlMismatch),
+    designQualityRequired: typeof config.designQualityRequired === "boolean" ? config.designQualityRequired : null,
+    designQualityReason: config.designQualityReason || config.design_quality_reason || null,
   };
 }

@@ -5,6 +5,8 @@
   "surface": "product-ui",
   "qaProfile": "final-qa",
   "qaRunId": "set-per-qa-run",
+  "designQualityRequired": true,
+  "designQualityReason": "Full-page product UI review needs final visual quality acceptance.",
   "waitForSelector": "main",
   "states": [
     {
