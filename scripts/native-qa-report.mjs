@@ -200,20 +200,39 @@ function declaredProfiles(entry) {
   return new Set(asArray(entry.profiles || entry.profile).filter(Boolean));
 }
 
+function isDefaultContentSize(value) {
+  return /^(default|normal|medium|standard)$/i.test(String(value || "default"));
+}
+
+function isPortraitOrientation(value) {
+  return !value || /^portrait$/i.test(String(value));
+}
+
+function isDefaultDisplaySize(value) {
+  return /^(default|normal|standard)$/i.test(String(value || "default"));
+}
+
 function entryProfiles(entry, platform) {
   const profiles = new Set();
   if (platform === "native-ios") {
-    if (entry.appearance === "light") profiles.add("default-light");
-    if (entry.appearance === "dark") profiles.add("dark");
-    if (/large|accessibility/i.test(String(entry.contentSize || ""))) profiles.add("large-text");
+    const defaultContent = isDefaultContentSize(entry.contentSize);
+    const defaultOrientation = isPortraitOrientation(entry.orientation);
+    const noKeyboard = entry.keyboard !== true && entry.focusedEditable !== true;
+    if (entry.appearance === "light" && defaultContent && defaultOrientation && noKeyboard) profiles.add("default-light");
+    if (entry.appearance === "dark" && defaultContent && defaultOrientation && noKeyboard) profiles.add("dark");
+    if (!defaultContent && /large|accessibility/i.test(String(entry.contentSize || ""))) profiles.add("large-text");
     if (entry.keyboard === true || entry.focusedEditable === true) profiles.add("keyboard-focused");
     if (/landscape/i.test(String(entry.orientation || ""))) profiles.add("landscape");
   } else if (platform === "native-android") {
-    if (entry.theme === "light") profiles.add("default-light");
-    if (entry.theme === "dark") profiles.add("dark");
-    if (Number(entry.fontScale || 1) > 1.1) profiles.add("font-scale-large");
+    const fontScale = Number(entry.fontScale || 1);
+    const defaultFont = fontScale <= 1.1;
+    const defaultDisplay = isDefaultDisplaySize(entry.displaySize);
+    const noIme = entry.ime !== true;
+    if (entry.theme === "light" && defaultFont && defaultDisplay && noIme) profiles.add("default-light");
+    if (entry.theme === "dark" && defaultFont && defaultDisplay && noIme) profiles.add("dark");
+    if (fontScale > 1.1) profiles.add("font-scale-large");
     if (entry.ime === true) profiles.add("ime-focused");
-    if (/large/i.test(String(entry.displaySize || ""))) profiles.add("display-large");
+    if (!defaultDisplay && /large/i.test(String(entry.displaySize || ""))) profiles.add("display-large");
   }
   return profiles;
 }
@@ -244,8 +263,15 @@ function sanitizeStringForOutput(value, outDir) {
     if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative.replaceAll(path.sep, "/");
     return "[absolute-path-redacted]";
   }
-  result = result.replace(/(^|[\s("'=])\/(?:Users|home|var|tmp|private|opt|Volumes)\/[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
+  const urls = [];
+  result = result.replace(/\bhttps?:\/\/[^\s"'`<>)]+/g, (url) => {
+    const token = `__DESIGN_DIRECTOR_URL_${urls.length}__`;
+    urls.push([token, url]);
+    return token;
+  });
+  result = result.replace(/(^|[\s("'=])\/(?!\/)(?:[^\s"'`<>)\/]+\/){1,}[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
   result = result.replace(/(^|[\s("'=])[A-Za-z]:\\(?:Users|Documents and Settings)\\[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
+  for (const [token, url] of urls) result = result.replaceAll(token, url);
   return result;
 }
 

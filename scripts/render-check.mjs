@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, imageMetadataForFile, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000 };
@@ -140,6 +140,7 @@ async function main() {
           url: targetUrl,
           viewport,
           screenshot: screenshotArtifactPath,
+          finalUrlException: state.finalUrlException ? { ...state.finalUrlException, source: "config" } : null,
           actions: [...(config.actions || []), ...(state.actions || [])],
           discoveredFrom: state.discoveredFrom || null,
           consoleMessages,
@@ -162,6 +163,7 @@ async function main() {
             viewport,
           });
           await page.screenshot({ path: screenshotPath, fullPage: Boolean(config.fullPage ?? true) });
+          entry.screenshotMetadata = await imageMetadataForFile(screenshotPath);
           results.screenshots.push(screenshotArtifactPath);
           entry.title = await page.title();
           entry.finalUrl = page.url();

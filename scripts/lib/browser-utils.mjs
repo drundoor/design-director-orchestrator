@@ -129,6 +129,72 @@ export function stableHash(value, length = 8) {
   return createHash("sha256").update(String(value || "")).digest("hex").slice(0, length);
 }
 
+export function imageDimensions(data, flags) {
+  if (flags.isPng && data.length >= 24) {
+    return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
+  }
+  if (flags.isJpeg) {
+    let offset = 2;
+    while (offset + 9 < data.length) {
+      if (data[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = data[offset + 1];
+      const length = data.readUInt16BE(offset + 2);
+      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+        return { height: data.readUInt16BE(offset + 5), width: data.readUInt16BE(offset + 7) };
+      }
+      if (!length) break;
+      offset += 2 + length;
+    }
+  }
+  if (flags.isWebp && data.length >= 30) {
+    const subtype = data.slice(12, 16).toString("ascii");
+    if (subtype === "VP8X" && data.length >= 30) {
+      return {
+        width: 1 + data.readUIntLE(24, 3),
+        height: 1 + data.readUIntLE(27, 3),
+      };
+    }
+    if (subtype === "VP8 " && data.length >= 30) {
+      const payloadOffset = 20;
+      if (data[payloadOffset + 3] === 0x9d && data[payloadOffset + 4] === 0x01 && data[payloadOffset + 5] === 0x2a) {
+        return {
+          width: data.readUInt16LE(payloadOffset + 6) & 0x3fff,
+          height: data.readUInt16LE(payloadOffset + 8) & 0x3fff,
+        };
+      }
+    }
+    if (subtype === "VP8L" && data.length >= 25) {
+      const payloadOffset = 20;
+      if (data[payloadOffset] === 0x2f) {
+        const bits = data.readUInt32LE(payloadOffset + 1);
+        return {
+          width: (bits & 0x3fff) + 1,
+          height: ((bits >> 14) & 0x3fff) + 1,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+export async function imageMetadataForFile(file) {
+  const data = await fs.readFile(file);
+  const isPng = data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a;
+  const isJpeg = data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+  const isWebp = data.length >= 12 && data.slice(0, 4).toString("ascii") === "RIFF" && data.slice(8, 12).toString("ascii") === "WEBP";
+  const dimensions = imageDimensions(data, { isPng, isJpeg, isWebp });
+  return {
+    sha256: createHash("sha256").update(data).digest("hex"),
+    size: data.length,
+    width: dimensions?.width || null,
+    height: dimensions?.height || null,
+    format: isPng ? "png" : isJpeg ? "jpeg" : isWebp ? "webp" : "unknown",
+  };
+}
+
 export function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;

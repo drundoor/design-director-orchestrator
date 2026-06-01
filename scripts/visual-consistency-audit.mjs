@@ -142,6 +142,7 @@ async function main() {
           stateIndex,
           url: targetUrl,
           viewport,
+          finalUrlException: state.finalUrlException ? { ...state.finalUrlException, source: "config" } : null,
           actions: [...(config.actions || []), ...(state.actions || [])],
           discoveredFrom: state.discoveredFrom || null,
           ok: false,
@@ -177,6 +178,15 @@ async function main() {
               const peerValueSelectors = selectorList(visualAudit.peerValueSelectors);
               const overlaySelectors = selectorList(visualAudit.overlaySelectors);
               const warningOnlySelectors = selectorList(visualAudit.warningOnlySelectors);
+              const warningOnlyFindingTypes = new Set([
+                "peer-typography-mismatch",
+                "peer-value-typography-mismatch",
+                "grid-column-alignment-drift",
+                "spacing-rhythm-outlier",
+                "related-width-mismatch",
+                "media-title-floating",
+                "camouflaged-control",
+              ]);
               const matchesAny = (el, selectors) => selectors.some((selector) => {
                 try {
                   return el.matches(selector);
@@ -196,7 +206,7 @@ async function main() {
                 const key = `${finding.type}|${finding.selector}|${finding.message}`;
                 if (seen.has(key)) return;
                 seen.add(key);
-                if (bucket === "blocker" && warningOnlySelectors.length) {
+                if (bucket === "blocker" && warningOnlySelectors.length && warningOnlyFindingTypes.has(finding.type)) {
                   try {
                     const el = document.querySelector(finding.selector);
                     if (el && (matchesAny(el, warningOnlySelectors) || closestAny(el, warningOnlySelectors))) bucket = "warning";

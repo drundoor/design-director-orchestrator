@@ -1,0 +1,29 @@
+{
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "discoveryHash": "copy-from-discovered-states-json",
+  "dispositions": [
+    {
+      "kind": "overlay-trigger",
+      "selector": "#filtersButton",
+      "disposition": "rendered",
+      "discoveredFrom": {
+        "state": "default",
+        "url": "http://127.0.0.1:5173/",
+        "viewport": "375x900"
+      },
+      "evidence": "screenshots/filter-open-375x900.png"
+    },
+    {
+      "kind": "safe-button",
+      "selector": "#duplicateSortButton",
+      "disposition": "duplicate",
+      "reason": "Same menu and layout as #sortButton, already rendered in this viewport.",
+      "discoveredFrom": {
+        "state": "default",
+        "url": "http://127.0.0.1:5173/",
+        "viewport": "375x900"
+      },
+      "evidence": "screenshots/sort-open-375x900.png"
+    }
+  ]
+}

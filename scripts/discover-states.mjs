@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, slug, stateIdFor, writeJson } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, slug, stableHash, stableStringify, stateIdFor, writeJson } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000, maxCandidates: 80, viewportMode: "smallest-largest", routesMode: "all", depth: 1 };
@@ -230,12 +230,30 @@ async function main() {
   const targetStates = selectStates(config, args.routesMode);
   const outDir = path.resolve(args.out);
   await fs.mkdir(outDir, { recursive: true });
+  const startedAt = new Date().toISOString();
+  const runMeta = qaRunMetadata(config, {
+    baseUrl,
+    states: config.states?.length ? config.states : [{ name: "default" }],
+    viewports: configuredViewports,
+    tool: "discover-states",
+    scriptOptions: {
+      timeout: args.timeout,
+      maxCandidates: args.maxCandidates,
+      viewportMode: args.viewportMode,
+      routesMode: args.routesMode,
+      depth: args.depth,
+      viewportsOverride: args.viewports || null,
+    },
+  }, startedAt);
 
   const { chromium } = await loadPlaywright();
   const browser = await launchBrowser(chromium);
   const results = {
     tool: "discover-states",
-    generatedAt: new Date().toISOString(),
+    generatedAt: startedAt,
+    startedAt,
+    finishedAt: null,
+    ...runMeta,
     baseUrl,
     viewportMode: args.viewportMode,
     routesMode: args.routesMode,
@@ -250,6 +268,7 @@ async function main() {
     scans: [],
     candidates: [],
     draftConfigPath: path.join(outDir, "render.config.discovered.json"),
+    setupActions: (config.actions || []).length ? "configured actions are run during scans" : "none configured",
   };
 
   try {
@@ -486,6 +505,15 @@ async function main() {
   }
 
   results.candidates = sortCandidates(results.candidates);
+  results.finishedAt = new Date().toISOString();
+  results.discoveryHash = stableHash(stableStringify({
+    baseUrl,
+    targets: results.targets,
+    viewports,
+    scans: results.scans,
+    candidates: results.candidates,
+    scriptOptions: results.scriptOptions,
+  }), 16);
   const safeStates = draftCandidates(results.candidates, Math.min(24, args.maxCandidates))
     .map((candidate, index) => {
       const sourceState = targetStates.find((state) => (state.name || "default") === candidate.discoveredFrom?.state) || {};

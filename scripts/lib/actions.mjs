@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { relativeArtifactPath, slug } from "./browser-utils.mjs";
+import { imageMetadataForFile, relativeArtifactPath, slug } from "./browser-utils.mjs";
 
 function locatorFor(page, selector = "body") {
   return page.locator(selector).first();
@@ -158,7 +158,15 @@ export async function runActions(page, actions = [], options = {}) {
       const file = path.join(screenshotDir, fileName);
       await locatorFor(page, action.selector).screenshot({ path: file, timeout: action.timeout ?? timeout });
       const artifactPath = options.artifactPathBase ? relativeArtifactPath(options.artifactPathBase, file) : file;
-      artifacts.push({ type: "element-screenshot", path: artifactPath, selector: action.selector, actionIndex, viewport: options.viewport || null, action });
+      artifacts.push({
+        type: "element-screenshot",
+        path: artifactPath,
+        screenshotMetadata: await imageMetadataForFile(file),
+        selector: action.selector,
+        actionIndex,
+        viewport: options.viewport || null,
+        action,
+      });
     } else if (type === "scrollBoundaryCheck") {
       await scrollBoundaryCheck(page, { ...action, timeout: action.timeout ?? timeout });
     } else {

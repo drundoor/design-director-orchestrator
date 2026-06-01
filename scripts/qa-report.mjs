@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { SEVERITY, qaSeverityForFinding } from "./lib/findings.mjs";
 
@@ -149,6 +150,10 @@ function normalizeUrl(value) {
   }
 }
 
+function sha256Hex(data) {
+  return createHash("sha256").update(data).digest("hex");
+}
+
 function viewportKey(viewport = {}) {
   return `${viewport.width || "?"}x${viewport.height || "?"}`;
 }
@@ -209,6 +214,7 @@ async function inspectScreenshot(file, outDir) {
       exists: true,
       valid,
       size: data.length,
+      sha256: sha256Hex(data),
       width: dimensions?.width || null,
       height: dimensions?.height || null,
       format: isPng ? "png" : isJpeg ? "jpeg" : isWebp ? "webp" : "unknown",
@@ -351,6 +357,7 @@ function loadScreenshots(render, outDir) {
         state: state.state || "unknown",
         viewport: state.viewport || null,
         url: state.finalUrl || state.url || "unknown",
+        expectedMetadata: state.screenshotMetadata || null,
       });
     }
     for (const artifact of state.actionArtifacts || []) {
@@ -362,6 +369,7 @@ function loadScreenshots(render, outDir) {
           state: state.state || "unknown",
           viewport: artifact.viewport || state.viewport || null,
           url: state.finalUrl || state.url || "unknown",
+          expectedMetadata: artifact.screenshotMetadata || null,
         });
       }
     }
@@ -375,6 +383,7 @@ function loadScreenshots(render, outDir) {
       state: state?.state || "unknown",
       viewport: state?.viewport || null,
       url: state?.finalUrl || state?.url || "unknown",
+      expectedMetadata: state?.screenshotMetadata || null,
     });
   }
 
@@ -483,6 +492,16 @@ function noteMetadataProblems(screenshot, fields) {
 function screenshotDimensionProblems(screenshot, integrity) {
   const problems = [];
   if (!integrity.valid) return problems;
+  if (!screenshot.expectedMetadata) {
+    problems.push(`${screenshot.path}: screenshot metadata is missing from render artifact; rerun render-check.mjs`);
+  } else {
+    const expected = screenshot.expectedMetadata;
+    for (const field of ["sha256", "size", "width", "height", "format"]) {
+      if (expected[field] !== undefined && expected[field] !== null && integrity[field] !== expected[field]) {
+        problems.push(`${screenshot.path}: screenshot ${field} mismatch; render artifact recorded ${expected[field]} but file is ${integrity[field]}`);
+      }
+    }
+  }
   if (!integrity.width || !integrity.height) {
     problems.push(`${screenshot.path}: screenshot dimensions could not be read`);
     return problems;
@@ -725,7 +744,7 @@ function renderedCandidate(candidate, states = []) {
 
 function staticControlsFromDom(dom) {
   return (dom?.states || []).flatMap((state) =>
-    (state.audit?.interactiveControls || []).map((control) => ({
+    (state.audit?.statefulControls || state.audit?.interactiveControls || []).map((control) => ({
       state: state.state || "default",
       viewport: state.viewport || null,
       control,
@@ -783,25 +802,60 @@ function artifactFreshness(artifacts, maxAgeMs) {
   };
 }
 
+function artifactLatestAgeMs(data = {}) {
+  const times = [data.startedAt, data.finishedAt || data.generatedAt]
+    .map((value) => Date.parse(value))
+    .filter((value) => Number.isFinite(value));
+  if (!times.length) return null;
+  return Math.max(0, Date.now() - Math.max(...times));
+}
+
+function artifactSpanAgainst(data = {}, freshness = {}) {
+  const times = [data.startedAt, data.finishedAt || data.generatedAt]
+    .map((value) => Date.parse(value))
+    .filter((value) => Number.isFinite(value));
+  const evidenceTimes = [freshness.earliest, freshness.latest]
+    .map((value) => Date.parse(value))
+    .filter((value) => Number.isFinite(value));
+  if (!times.length || !evidenceTimes.length) return null;
+  return Math.max(...times, ...evidenceTimes) - Math.min(...times, ...evidenceTimes);
+}
+
+function artifactHasFreshnessMetadata(data = {}) {
+  return Boolean(data.configHash && data.evidenceHash && data.qaRunId && data.startedAt && data.finishedAt);
+}
+
 function stateFinalUrl(state = {}) {
   return normalizeUrl(state.finalUrl || state.url);
 }
 
 async function finalUrlException(state = {}, other = {}, outDir) {
-  const exception = state.finalUrlException || state.allowedFinalUrlMismatch || other.finalUrlException || other.allowedFinalUrlMismatch || null;
+  const exception = state.finalUrlException || null;
   if (!exception || typeof exception !== "object") return { allowed: false, reason: "no scoped exception" };
-  const expected = exception.expectedFinalUrl || exception.allowedRedirectTo;
+  if (exception.source !== "config") return { allowed: false, reason: "finalUrlException must come from render config state, not a post-hoc artifact patch" };
+  const fromFinalUrl = exception.fromFinalUrl;
+  const toFinalUrl = exception.toFinalUrl;
   const reason = String(exception.reason || "").trim();
   const evidence = exception.evidence;
-  if (!expected) return { allowed: false, reason: "missing expectedFinalUrl or allowedRedirectTo" };
+  if (!fromFinalUrl || !toFinalUrl) return { allowed: false, reason: "missing fromFinalUrl or toFinalUrl" };
   if (!reason) return { allowed: false, reason: "missing reason" };
   if (!evidence) return { allowed: false, reason: "missing evidence" };
   if (!evidencePathInside(outDir, evidence)) return { allowed: false, reason: `evidence must be inside ${path.basename(outDir)}` };
   if (!(await pathExists(resolveEvidencePath(outDir, evidence)))) return { allowed: false, reason: "evidence file missing" };
-  const normalizedExpected = normalizeUrl(expected);
-  const actualUrls = new Set([stateFinalUrl(state), stateFinalUrl(other)]);
-  if (!actualUrls.has(normalizedExpected)) return { allowed: false, reason: `expected URL ${expected} does not match either artifact URL` };
-  return { allowed: true, reason, evidence: artifactPath(outDir, evidence), expectedFinalUrl: normalizedExpected };
+  const normalizedFrom = normalizeUrl(fromFinalUrl);
+  const normalizedTo = normalizeUrl(toFinalUrl);
+  if (stateFinalUrl(state) !== normalizedFrom || stateFinalUrl(other) !== normalizedTo) {
+    return { allowed: false, reason: `finalUrlException pair ${normalizedFrom} -> ${normalizedTo} does not match render/artifact pair ${stateFinalUrl(state)} -> ${stateFinalUrl(other)}` };
+  }
+  const allowedEvidence = new Set([
+    state.screenshot,
+    ...(state.actionArtifacts || []).filter((artifact) => artifact.type === "element-screenshot").map((artifact) => artifact.path),
+  ].filter(Boolean).map((file) => artifactPath(outDir, file)));
+  const evidenceArtifact = artifactPath(outDir, evidence);
+  if (!allowedEvidence.has(evidenceArtifact)) {
+    return { allowed: false, reason: `evidence ${evidenceArtifact} does not match a screenshot artifact for ${state.state || "default"} ${viewportKey(state.viewport)}` };
+  }
+  return { allowed: true, reason, evidence: evidenceArtifact, fromFinalUrl: normalizedFrom, toFinalUrl: normalizedTo };
 }
 
 function sanitizeStringForOutput(value, outDir) {
@@ -813,8 +867,15 @@ function sanitizeStringForOutput(value, outDir) {
     if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative.replaceAll(path.sep, "/");
     return "[absolute-path-redacted]";
   }
-  result = result.replace(/(^|[\s("'=])\/(?:Users|home|var|tmp|private|opt|Volumes)\/[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
+  const urls = [];
+  result = result.replace(/\bhttps?:\/\/[^\s"'`<>)]+/g, (url) => {
+    const token = `__DESIGN_DIRECTOR_URL_${urls.length}__`;
+    urls.push([token, url]);
+    return token;
+  });
+  result = result.replace(/(^|[\s("'=])\/(?!\/)(?:[^\s"'`<>)\/]+\/){1,}[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
   result = result.replace(/(^|[\s("'=])[A-Za-z]:\\(?:Users|Documents and Settings)\\[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
+  for (const [token, url] of urls) result = result.replaceAll(token, url);
   return result;
 }
 
@@ -969,6 +1030,66 @@ async function main() {
     else addIncomplete(message, "evidence-freshness");
   }
 
+  if (!args.static && discoveryArtifact.exists) {
+    const discovery = discoveryArtifact.data || {};
+    if (!discovery.discoveryHash) addIncomplete("discovered-states.json is missing discoveryHash; rerun discover-states.mjs", "state-discovery:freshness");
+    if (!artifactHasFreshnessMetadata(discovery)) addIncomplete("discovered-states.json is missing freshness/run metadata; rerun discover-states.mjs", "state-discovery:freshness");
+    if (freshness.hashes.length === 1 && discovery.configHash && discovery.configHash !== freshness.hashes[0]) {
+      addIncomplete(`discovered-states.json configHash ${discovery.configHash} does not match web audit configHash ${freshness.hashes[0]}`, "state-discovery:freshness");
+    }
+    if (freshness.baseUrls.length === 1 && discovery.baseUrl && normalizeUrl(discovery.baseUrl) !== freshness.baseUrls[0]) {
+      addIncomplete(`discovered-states.json baseUrl ${discovery.baseUrl} does not match web audit baseUrl ${freshness.baseUrls[0]}`, "state-discovery:freshness");
+    }
+    if (discovery.qaRunIdSource !== "configured") {
+      const message = "discovered-states.json used a generated qaRunId; set config.qaRunId or DESIGN_DIRECTOR_QA_RUN_ID for final same-run acceptance";
+      if (mixedEvidenceAllowed) warnings.push(message);
+      else addIncomplete(message, "state-discovery:freshness");
+    }
+    if (freshness.configuredRunIds.length === 1 && discovery.qaRunId && discovery.qaRunId !== freshness.configuredRunIds[0]) {
+      addIncomplete(`discovered-states.json qaRunId ${discovery.qaRunId} does not match web audit qaRunId ${freshness.configuredRunIds[0]}`, "state-discovery:freshness");
+    }
+    if (freshness.appBuildIds.length === 1 && discovery.appBuildId && discovery.appBuildId !== freshness.appBuildIds[0]) {
+      addIncomplete(`discovered-states.json appBuildId ${discovery.appBuildId} does not match web audit appBuildId ${freshness.appBuildIds[0]}`, "state-discovery:freshness");
+    }
+    const discoveryAgeMs = artifactLatestAgeMs(discovery);
+    if (discoveryAgeMs === null) {
+      addIncomplete("discovered-states.json is missing parseable timestamps; rerun discover-states.mjs", "state-discovery:freshness");
+    } else if (discoveryAgeMs > maxEvidenceAgeMs) {
+      addIncomplete(`discovered-states.json is ${discoveryAgeMs}ms old, exceeding max evidence age ${maxEvidenceAgeMs}ms`, "state-discovery:freshness");
+    }
+    const discoverySpanMs = artifactSpanAgainst(discovery, freshness);
+    if (discoverySpanMs !== null && discoverySpanMs > maxEvidenceAgeMs) {
+      addIncomplete(`discovered-states.json was generated ${discoverySpanMs}ms apart from web audit evidence, exceeding max evidence age ${maxEvidenceAgeMs}ms`, "state-discovery:freshness");
+    }
+  }
+
+  if (!args.static && stateCoverageArtifact.exists) {
+    const stateCoverage = stateCoverageArtifact.data || {};
+    const items = stateCoverageItems(stateCoverage);
+    if (items.length) {
+      const discoveryHash = discoveryArtifact.data?.discoveryHash || null;
+      if (stateCoverage.discoveryHash) {
+        if (!discoveryHash) addIncomplete("state-coverage.json declares discoveryHash but discovered-states.json has no discoveryHash", "state-coverage:freshness");
+        else if (stateCoverage.discoveryHash !== discoveryHash) addIncomplete(`state-coverage.json discoveryHash ${stateCoverage.discoveryHash} does not match discovered-states.json discoveryHash ${discoveryHash}`, "state-coverage:freshness");
+      } else if (artifactHasFreshnessMetadata(stateCoverage)) {
+        if (freshness.hashes.length === 1 && stateCoverage.configHash !== freshness.hashes[0]) {
+          addIncomplete(`state-coverage.json configHash ${stateCoverage.configHash} does not match web audit configHash ${freshness.hashes[0]}`, "state-coverage:freshness");
+        }
+        if (freshness.configuredRunIds.length === 1 && stateCoverage.qaRunId !== freshness.configuredRunIds[0]) {
+          addIncomplete(`state-coverage.json qaRunId ${stateCoverage.qaRunId} does not match web audit qaRunId ${freshness.configuredRunIds[0]}`, "state-coverage:freshness");
+        }
+      } else {
+        addIncomplete("state-coverage.json dispositions must include discoveryHash or same-run freshness metadata", "state-coverage:freshness");
+      }
+      const coverageAgeMs = artifactLatestAgeMs(stateCoverage);
+      if (coverageAgeMs === null) {
+        addIncomplete("state-coverage.json is missing parseable generatedAt/finishedAt timestamp", "state-coverage:freshness");
+      } else if (coverageAgeMs > maxEvidenceAgeMs) {
+        addIncomplete(`state-coverage.json is ${coverageAgeMs}ms old, exceeding max evidence age ${maxEvidenceAgeMs}ms`, "state-coverage:freshness");
+      }
+    }
+  }
+
   if (renderArtifact.exists && !(render.states || []).length) addIncomplete("render-results.json has no state entries", "render-results:empty");
   if (domArtifact.exists && !(dom.states || []).length) addIncomplete("dom-audit.json has no state entries", "dom-audit:empty");
   if (visualArtifact.exists && !(visual.states || []).length) addIncomplete("visual-consistency-audit.json has no state entries", "visual-consistency-audit:empty");
@@ -1044,7 +1165,7 @@ async function main() {
   if (args.static) {
     const controls = staticControlsFromDom(dom);
     coverage.staticControlEvidence = controls;
-    if (!domArtifact.exists || (dom.states || []).some((state) => !Array.isArray(state.audit?.interactiveControls))) {
+    if (!domArtifact.exists || (dom.states || []).some((state) => !Array.isArray(state.audit?.statefulControls) && !Array.isArray(state.audit?.interactiveControls))) {
       addIncomplete("--static requires DOM interactive-control evidence or a valid state-discovery waiver", "static-verification");
     } else if (controls.length) {
       addIncomplete(`--static used but DOM audit found ${controls.length} interactive control candidate(s)`, "static-verification");

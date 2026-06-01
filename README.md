@@ -147,7 +147,7 @@ The intent is separate from the platform. Use `repair + native-ios` or `qa + nat
 6. Generate the QA report.
 7. Do not accept the design pass while unwaived blockers remain.
 
-Set a fresh shared `qaRunId` in `.design-director/render.config.json` or `DESIGN_DIRECTOR_QA_RUN_ID` before running the three web audit scripts. Final QA rejects generated run IDs, stale artifacts, mixed config hashes, mixed base URLs, or script artifacts missing `evidenceHash`/timestamp metadata.
+Set a fresh shared `qaRunId` in `.design-director/render.config.json` or `DESIGN_DIRECTOR_QA_RUN_ID` before running discovery and the three web audit scripts. Final QA rejects generated run IDs, stale artifacts, mixed config hashes, mixed base URLs, screenshot hash drift, or script artifacts missing `evidenceHash`/timestamp metadata. Discovery and state-coverage artifacts must also be fresh and tied to the same configured run or current `discoveryHash`.
 
 Example:
 
@@ -179,11 +179,11 @@ Final web acceptance means `.design-director/design-qa.json` has `status: "pass"
 Final acceptance checklist:
 
 - `design-brief.md` exists.
-- Render, DOM, and visual audit artifacts are fresh and share the same configured `qaRunId`.
+- Discovery, render, DOM, and visual audit artifacts are fresh and share the same configured `qaRunId`.
 - `design-qa.json` status is `pass`.
 - `acceptanceReady` is `true`.
 - Screenshot notes were inspected.
-- State discovery and coverage are resolved.
+- State discovery and coverage are resolved against the current `discoveryHash`.
 - No unwaived blockers or incomplete evidence remain.
 
 For non-interactive static pages only, add `--static` to waive state discovery. Static mode can be final acceptance (`qaMode: "final-static"`) only when every other artifact passes and the DOM audit finds no visible interactive controls. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence and exit nonzero unless `--allow-partial-exit-zero` is explicitly supplied.
@@ -195,6 +195,8 @@ Minimum successful web QA artifact tree:
   render-results.json
   dom-audit.json
   visual-consistency-audit.json
+  discovered-states.json
+  state-coverage.json        # when discovered candidates are not rendered
   design-brief.md
   screenshot-notes.md
   design-qa.json
@@ -289,6 +291,8 @@ The QA scripts support state actions so the design pass can inspect UI while it 
 Supported action types include `click`, `fill`, `type`, `focus`, `blur`, `hover`, `press`, `keyboardShortcut`, `select`, `check`, `uncheck`, `wait`, `waitForSelector`, `waitForNetworkIdle`, `waitForStableLayout`, `reload`, `scrollIntoView`, `scrollBy`, `scrollTo`, `wheel`, `drag`, `resizeViewport`, `setViewport`, `setLocalStorage`, `setSessionStorage`, `clearStorage`, `assertVisible`, `assertHidden`, `assertText`, `assertNoHorizontalOverflow`, `screenshotElement`, and `scrollBoundaryCheck`.
 
 Validate config shape with `scripts/render.config.schema.json` when your editor or CI supports JSON Schema.
+
+`visualAudit.warningOnlySelectors` may downgrade ordinary consistency warnings for intentional layouts, but it never downgrades overlay occlusion, viewport clipping, or other blocker-class active-state failures. Use scoped waivers with evidence for those cases.
 
 Waivers live in `.design-director/waivers.json`; see `examples/waivers.example.json`. Every final-QA waiver needs a check, reason, evidence, owner, and expiry date. Scope waivers to a state, selector, route, or viewport whenever possible; unused valid waivers fail the QA report so stale waivers do not accumulate. State coverage dispositions also need evidence discipline: non-rendered dispositions need a reason, and `waived`, `duplicate`, and `low-value` need evidence.
 

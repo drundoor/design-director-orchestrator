@@ -82,6 +82,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/action" }
         },
+        "finalUrlException": { "$ref": "#/$defs/finalUrlException" },
         "discoveredFrom": {
           "type": "object",
           "additionalProperties": true,
@@ -263,6 +264,17 @@
     "selectorList": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
+    },
+    "finalUrlException": {
+      "type": "object",
+      "required": ["fromFinalUrl", "toFinalUrl", "reason", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "fromFinalUrl": { "type": "string", "minLength": 1 },
+        "toFinalUrl": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "string", "minLength": 1 }
+      }
     },
     "waiver": {
       "type": "object",

@@ -96,6 +96,7 @@ async function main() {
           stateIndex,
           url: targetUrl,
           viewport,
+          finalUrlException: state.finalUrlException ? { ...state.finalUrlException, source: "config" } : null,
           actions: [...(config.actions || []), ...(state.actions || [])],
           discoveredFrom: state.discoveredFrom || null,
           ok: false,
@@ -212,19 +213,63 @@ async function main() {
               "textarea",
               "details",
               "summary",
+              "a[href]",
               "[role='button']",
               "[role='combobox']",
               "[aria-expanded]",
               "[aria-controls]",
               "[popover]",
               "[onclick]",
+              "[data-state]",
+              "[data-testid*='menu' i]",
+              "[data-testid*='filter' i]",
+              "[data-testid*='modal' i]",
+              "[data-testid*='dialog' i]",
+              "[data-testid*='drawer' i]",
+              "[data-test*='menu' i]",
+              "[data-test*='filter' i]",
+              "[data-test*='modal' i]",
+              "[data-test*='dialog' i]",
+              "[data-test*='drawer' i]",
             ].join(",");
-            const interactiveControls = [...document.querySelectorAll(staticControlSelector)]
+            const isRealNavigationLink = (el) => {
+              if (el.tagName.toLowerCase() !== "a") return false;
+              const href = (el.getAttribute("href") || "").trim();
+              if (!href || href === "#" || href.toLowerCase().startsWith("javascript:")) return false;
+              const signature = `${el.className || ""} ${el.id || ""} ${el.getAttribute("role") || ""} ${el.getAttribute("aria-label") || ""}`.toLowerCase();
+              if (/(button|btn|menu|filter|modal|dialog|drawer|toggle|dropdown|popover|tab|accordion|disclosure)/.test(signature)) return false;
+              return true;
+            };
+            const statefulReason = (el) => {
+              const tag = el.tagName.toLowerCase();
+              const role = (el.getAttribute("role") || "").toLowerCase();
+              const href = (el.getAttribute("href") || "").trim();
+              const signature = `${el.className || ""} ${el.id || ""} ${role} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("data-test") || ""}`.toLowerCase();
+              if (tag === "a" && (href === "#" || href.toLowerCase().startsWith("javascript:"))) return "anchor without real navigation";
+              if (/(button|btn|menu|filter|modal|dialog|drawer|toggle|dropdown|popover|tab|accordion|disclosure)/.test(signature)) return "button-like link/control signature";
+              if (el.hasAttribute("data-state")) return "data-state control";
+              if (el.hasAttribute("aria-expanded") || el.hasAttribute("aria-controls") || el.hasAttribute("popover")) return "stateful aria/popover control";
+              if (el.hasAttribute("onclick")) return "inline click handler";
+              if (["button", "input", "select", "textarea", "details", "summary"].includes(tag) || ["button", "combobox"].includes(role)) return "native or ARIA control";
+              const style = getComputedStyle(el);
+              if (style.cursor === "pointer" && !isRealNavigationLink(el)) return "pointer cursor without real navigation";
+              return null;
+            };
+            const staticControls = [...document.querySelectorAll(staticControlSelector)]
               .filter(visible)
+              .slice(0, 160);
+            const links = staticControls
+              .filter(isRealNavigationLink)
               .slice(0, 120)
-              .map(preview);
+              .map((el) => ({ ...preview(el), href: el.getAttribute("href"), staticRole: "navigation-link" }));
+            const statefulControls = staticControls
+              .map((el) => ({ el, reason: statefulReason(el) }))
+              .filter((item) => item.reason)
+              .slice(0, 120)
+              .map(({ el, reason }) => ({ ...preview(el), href: el.getAttribute("href") || null, staticRole: "stateful-control", reason }));
+            const interactiveControls = [...statefulControls, ...links];
 
-            return { overflow, clipped, tinyText, smallTargets, unlabeledFocusable, hoverOnlyCandidates, interactiveControls };
+            return { overflow, clipped, tinyText, smallTargets, unlabeledFocusable, hoverOnlyCandidates, interactiveControls, statefulControls, links };
           }, { minTextPx: args.minTextPx, minTargetPx: args.minTargetPx });
           entry.finalUrl = page.url();
           entry.ok = true;
