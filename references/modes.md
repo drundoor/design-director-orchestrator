@@ -61,7 +61,8 @@ If the user says redesign, revamp, makeover, or make it better, default to
 For a new build with no existing code, the brief must explicitly mark local
 truth as missing and capture the target audience, content/data availability,
 style request, inspirations, constraints, anti-goals, design thesis, style
-posture, signature move, Impeccable route, peer-skill execution evidence,
+posture, signature move, domain-specific artifact, interaction/dynamism plan,
+conventionality risk, Impeccable route, peer-skill execution evidence,
 reference discovery plan, and surface quality bar before implementation. Use
 `references/design-quality-gates.md`.
 
@@ -99,6 +100,11 @@ modify, isolate the work:
 
 For repeatable benchmark/static-mockup runs, optimize for design signal first:
 
+- Use `npm run mockup:init` to create the isolated run context.
+- Use `npm run reference:seed` to add compact local reference packs before
+  implementation.
+- Use `npm run mockup:assert` before QA so placeholder files and escaped output
+  roots fail early.
 - Build the isolated mockup and run draft QA at 3 representative viewports:
   mobile, tablet, and desktop.
 - Inspect those screenshots and fix obvious design defects.
@@ -156,6 +162,9 @@ Record:
 - `design_thesis`
 - `style_posture`
 - `signature_move`
+- `domain_specific_artifact`
+- `interaction_or_dynamism_plan`
+- `conventionality_risk`
 - `impeccable_route`
 - `impeccable_execution`
 - `hallmark_execution`

@@ -13,7 +13,7 @@
     },
     "surface": { "type": "string" },
     "qaProfile": {
-      "enum": ["audit", "repair", "revamp", "implementation", "final-qa", "static"]
+      "enum": ["audit", "repair", "revamp", "implementation", "final-qa", "static", "draft-static-mockup"]
     },
     "qaRunId": { "type": "string", "minLength": 1 },
     "appBuildId": { "type": "string", "minLength": 1 },
@@ -25,6 +25,31 @@
     "evidenceMode": {
       "enum": ["final", "evidence-only", "partial", "static"]
     },
+    "viewportPreset": {
+      "enum": ["default", "mockup", "mobile-tablet-desktop"]
+    },
+    "recipes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "focus": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/focusTarget" }
+    },
+    "dataCaveat": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "truthStatus": { "type": "string" },
+        "sourceLabel": { "type": "string" },
+        "requiredInBrief": { "type": "boolean" },
+        "requiredInQa": { "type": "boolean" },
+        "uiPolicy": { "type": "string" },
+        "prominentUiBannerAllowed": { "type": "boolean" },
+        "stakeholderFacing": { "type": "boolean" }
+      }
+    },
+    "singlePassDraftRequested": { "type": "boolean" },
     "waitForSelector": { "type": "string", "minLength": 1 },
     "waitMs": { "type": "number", "minimum": 0 },
     "fullPage": { "type": "boolean" },
@@ -103,6 +128,16 @@
         }
       }
     },
+    "focusTarget": {
+      "type": "object",
+      "required": ["selector", "kind"],
+      "additionalProperties": true,
+      "properties": {
+        "selector": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
     "action": {
       "type": "object",
       "required": ["type"],
@@ -145,6 +180,7 @@
           ]
         },
         "selector": { "type": "string", "minLength": 1 },
+        "optional": { "type": "boolean" },
         "value": {},
         "text": { "type": "string" },
         "key": { "type": "string", "minLength": 1 },

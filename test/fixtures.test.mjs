@@ -182,6 +182,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -305,7 +309,7 @@ async function createQaArtifacts(out, overrides = {}) {
 ## hallmark-execution
 
 - Outcome: Loaded and applied Hallmark anti-slop checks.
-- References: Generic scaffold, decorative pill, fake chrome, and weak hierarchy checks completed.
+- References: Generic scaffold, decorative pill, fake chrome, weak hierarchy, and domainSpecificArtifact checks completed.
 - Pass/fail: Pass
 `);
   }
@@ -348,7 +352,7 @@ async function writeDesignQualityArtifact(out, overrides = {}) {
     const bytes = await fs.readFile(path.join(out, screenshotPath));
     reviewedScreenshotHashes[screenshotPath] = createHash("sha256").update(bytes).digest("hex");
   }
-  const verdicts = Object.fromEntries(["thesisExpressed", "stylePostureExpressed", "signatureMoveVisible", "styleCommitmentHonored", "genericScaffoldAvoided"].map((field) => [
+  const verdicts = Object.fromEntries(["thesisExpressed", "stylePostureExpressed", "signatureMoveVisible", "distinctivenessVisible", "domainSpecificityVisible", "dynamicStateOrMotionConsidered", "styleCommitmentHonored", "genericScaffoldAvoided"].map((field) => [
     field,
     { verdict: "pass", evidence },
   ]));
@@ -383,7 +387,7 @@ async function writeDesignQualityArtifact(out, overrides = {}) {
         status: "available",
         executionEvidence: {
           path: "peer-execution.md#hallmark-execution",
-          checks: ["genericScaffold", "decorativePills", "fakeChrome", "weakHierarchy"],
+          checks: ["genericScaffold", "decorativePills", "fakeChrome", "weakHierarchy", "domainSpecificArtifact"],
           summary: "Loaded Hallmark pre-emit critique and checked for generic AI slop."
         }
       },
@@ -559,13 +563,16 @@ test("visual audit leaves fixed, hierarchy, and normal flow role fixtures withou
   }
 });
 
-test("visual audit warns on generic non-interactive pill labels", async () => {
+test("visual audit blocks generic non-interactive pill labels", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-visual-pills-"));
   const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/generic-pills.html")).toString();
-  await runScript(["scripts/visual-consistency-audit.mjs", "--url", fixtureUrl, "--out", out, "--viewports", "375x700", "--max-elements", "500"]);
+  await assert.rejects(
+    runScript(["scripts/visual-consistency-audit.mjs", "--url", fixtureUrl, "--out", out, "--viewports", "375x700", "--max-elements", "500"]),
+    /visual-consistency-audit/,
+  );
   const audit = JSON.parse(await fs.readFile(path.join(out, "visual-consistency-audit.json"), "utf8"));
-  const warnings = audit.states.flatMap((state) => state.audit?.warnings || []);
-  assert.ok(warnings.some((finding) => finding.type === "generic-pill-capsule"));
+  const blockers = audit.states.flatMap((state) => state.audit?.blockers || []);
+  assert.ok(blockers.some((finding) => finding.type === "generic-pill-capsule"));
 });
 
 test("render-check screenshot names include viewport width and height", async () => {
@@ -825,6 +832,10 @@ Rendered QA must pass.
   assert.ok(qa.incomplete.some((issue) => issue.includes("style posture")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("design exploration depth")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("signature move")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("domain-specific artifact")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("interaction or dynamism plan")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("conventionality risk")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("distinctiveness floor")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("style commitment")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("first-viewport consequence")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("Impeccable route")));
@@ -861,6 +872,10 @@ Do not invent data or copy reference assets.
 - Design exploration depth: Lean; use one correctness source, one support-operations domain source, and one taste/art-direction source before implementation.
 - Visual signature: Editorial operational header, high-contrast risk language, compact metrics, and direct chart labels.
 - Signature move: The first screen frames the dashboard as a support incident room, making SLA risk and owner accountability visible before decorative analytics.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident-room command surface, not generic SaaS analytics.
 - First-viewport consequence: The lead queue, risk drivers, and staffing move appear before any table tour.
 - Layout consequence: A decision board and evidence rail replace equal metric cards plus a chart.
@@ -913,6 +928,10 @@ Do not invent data.
 - Design exploration depth: Lean.
 - Visual signature: Risk-first evidence board.
 - Signature move: Incident queue rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room, not generic SaaS dashboard.
 - First-viewport consequence: Queue risk is visible first.
 - Layout consequence: Decision board replaces equal cards.
@@ -999,6 +1018,10 @@ Do not invent data.
 - Design exploration depth: Lean.
 - Visual signature: Risk-first evidence board.
 - Signature move: Incident queue rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room, not generic SaaS dashboard.
 - First-viewport consequence: Queue risk is visible first.
 - Layout consequence: Decision board replaces equal cards.
@@ -1035,6 +1058,9 @@ test("qa-report accepts unavailable peer skills only with fallback checklist evi
 
 - craftCompleteness: checked and passed
 - styleCommitment: checked and passed
+- distinctiveness: checked and passed
+- domainSpecificity: checked and passed
+- interactionDynamism: checked and passed
 - layoutHierarchy: checked and passed
 - typographyConsistency: checked and passed
 - responsiveAdaptation: checked and passed
@@ -1046,6 +1072,7 @@ test("qa-report accepts unavailable peer skills only with fallback checklist evi
 - fakeChrome: checked and none found
 - stockHero: checked and none found
 - weakHierarchy: checked and passed
+- domainSpecificArtifact: checked and passed
 `);
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
@@ -1071,6 +1098,10 @@ Do not invent data.
 - Design exploration depth: Lean.
 - Visual signature: Risk-first evidence board.
 - Signature move: Incident queue rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room, not generic SaaS dashboard.
 - First-viewport consequence: Queue risk is visible first.
 - Layout consequence: Decision board replaces equal cards.
@@ -1096,7 +1127,7 @@ Rendered QA must pass.
         fallbackChecklistCompleted: true,
         fallbackEvidence: {
           path: "peer-fallback.md#impeccable-fallback",
-          requiredChecks: ["craftCompleteness", "styleCommitment", "layoutHierarchy", "typographyConsistency", "responsiveAdaptation"]
+          requiredChecks: ["craftCompleteness", "styleCommitment", "distinctiveness", "domainSpecificity", "interactionDynamism", "layoutHierarchy", "typographyConsistency", "responsiveAdaptation"]
         }
       },
       hallmark: {
@@ -1104,7 +1135,7 @@ Rendered QA must pass.
         fallbackChecklistCompleted: true,
         fallbackEvidence: {
           path: "peer-fallback.md#hallmark-fallback",
-          requiredChecks: ["genericScaffold", "decorativePills", "fakeChrome", "stockHero", "weakHierarchy"]
+          requiredChecks: ["genericScaffold", "decorativePills", "fakeChrome", "stockHero", "weakHierarchy", "domainSpecificArtifact"]
         }
       }
     }
@@ -1141,6 +1172,10 @@ Do not invent data.
 - Design exploration depth: Lean.
 - Visual signature: Risk-first evidence board.
 - Signature move: Incident queue rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room, not generic SaaS dashboard.
 - First-viewport consequence: Queue risk is visible first.
 - Layout consequence: Decision board replaces equal cards.
@@ -1202,6 +1237,10 @@ Do not invent data.
 - Design exploration depth: Deep.
 - Visual signature: Risk-first evidence board.
 - Signature move: Incident queue rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room, not generic SaaS dashboard.
 - First-viewport consequence: Queue risk is visible first.
 - Layout consequence: Decision board replaces equal cards.
@@ -1259,6 +1298,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1319,6 +1362,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1359,6 +1406,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1407,6 +1458,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1447,6 +1502,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1541,6 +1600,10 @@ Design quality bar:
 - Design exploration depth: Lean.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1658,6 +1721,10 @@ Design quality bar:
 - Design exploration depth: Deep.
 - Visual signature: Risk rail.
 - Signature move: Risk rail.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident room.
 - First-viewport consequence: Risk appears first.
 - Layout consequence: Decision board.
@@ -1729,6 +1796,10 @@ Do not invent data or copy reference assets.
 - Design exploration depth: Lean.
 - Visual signature: Operational header, high-contrast risk language, compact metrics, and direct chart labels.
 - Signature move: The first screen frames the dashboard as an incident room rather than decorative analytics.
+- Domain-specific artifact: Support triage board with an owner/risk rail.
+- Interaction or dynamism plan: Static risk progression and active queue evidence are inspected in screenshots.
+- Conventionality risk: Could collapse into metric cards plus a chart; the decision board and owner rail avoid that.
+- Distinctiveness floor: Decision board and owner/risk rail must be visible in mobile and desktop screenshots.
 - Style commitment: Incident-room queue board, not generic SaaS analytics.
 - First-viewport consequence: The top queue and staffing action are visible before diagnostics.
 - Layout consequence: Decision board replaces equal metric cards.
@@ -2672,6 +2743,8 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(readme.includes("functional but bland"));
   assert.ok(readme.includes("style posture"));
   assert.ok(readme.includes("signature move"));
+  assert.ok(readme.includes("domain-specific artifact"));
+  assert.ok(readme.includes("interaction/dynamism plan") || readme.includes("interaction or dynamism plan"));
   assert.ok(readme.includes("Impeccable route"));
   assert.ok(readme.includes("Impeccable execution"));
   assert.ok(readme.includes("reference discovery"));

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/drundoor/design-director-orchestrator/blob/main/schemas/run-context.schema.json",
+  "title": "Design Director Fast Mockup Run Context",
+  "type": "object",
+  "required": [
+    "version",
+    "mode",
+    "targetRoot",
+    "outputRoot",
+    "entry",
+    "qaOut",
+    "renderConfig",
+    "surface",
+    "profile",
+    "qaRunId",
+    "allowedWriteRoots"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "mode": {
+      "enum": ["draft-fast-static-mockup", "static-mockup", "draft-static-mockup"]
+    },
+    "cwd": { "type": "string" },
+    "repoRoot": { "type": "string", "minLength": 1 },
+    "targetRoot": { "type": "string", "minLength": 1 },
+    "outputRoot": { "type": "string", "minLength": 1 },
+    "entry": { "type": "string", "minLength": 1 },
+    "qaOut": { "type": "string", "minLength": 1 },
+    "renderConfig": { "type": "string", "minLength": 1 },
+    "surface": { "type": "string", "minLength": 1 },
+    "profile": { "type": "string", "minLength": 1 },
+    "qaRunId": { "type": "string", "minLength": 1 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "allowedWriteRoots": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

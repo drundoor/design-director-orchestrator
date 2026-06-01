@@ -1044,14 +1044,17 @@ const DESIGN_VERDICT_FIELDS = [
   "thesisExpressed",
   "stylePostureExpressed",
   "signatureMoveVisible",
+  "distinctivenessVisible",
+  "domainSpecificityVisible",
+  "dynamicStateOrMotionConsidered",
   "styleCommitmentHonored",
   "genericScaffoldAvoided",
 ];
 const PEER_SKILL_STATUSES = new Set(["available", "unavailable-fallback-used", "user-waived", "skipped-while-available"]);
 const REFERENCE_OUTCOMES = new Set(["lean-complete", "local-system-sufficient", "offline-constrained", "user-forbids-browsing", "deep-requested"]);
 const FALLBACK_CHECKS = {
-  impeccable: ["craftCompleteness", "styleCommitment", "layoutHierarchy", "typographyConsistency", "responsiveAdaptation"],
-  hallmark: ["genericScaffold", "decorativePills", "fakeChrome", "stockHero", "weakHierarchy"],
+  impeccable: ["craftCompleteness", "styleCommitment", "distinctiveness", "domainSpecificity", "interactionDynamism", "layoutHierarchy", "typographyConsistency", "responsiveAdaptation"],
+  hallmark: ["genericScaffold", "decorativePills", "fakeChrome", "stockHero", "weakHierarchy", "domainSpecificArtifact"],
 };
 
 function asArray(value) {
@@ -1691,6 +1694,17 @@ function briefProblems(text, gate = designQualityGateFor(text, null)) {
     }
     if (!/signature move\s*:/i.test(text) || /signature move\s*:\s*TODO\b/i.test(text)) {
       problems.push("design-brief.md needs a filled signature move for concept/revamp/new-build work");
+    }
+    for (const field of [
+      "Domain-specific artifact",
+      "Interaction or dynamism plan",
+      "Conventionality risk",
+      "Distinctiveness floor",
+    ]) {
+      const value = extractBriefField(text, field);
+      if (!value || /^TODO\b/i.test(value)) {
+        problems.push(`design-brief.md needs a filled ${field.toLowerCase()} for concept/revamp/new-build work`);
+      }
     }
     for (const field of [
       "Style commitment",

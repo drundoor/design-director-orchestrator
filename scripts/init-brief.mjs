@@ -94,12 +94,16 @@ TODO - named style, mood, density, motion level, and visual references. If the u
 - Design exploration depth: TODO - lean by default; use standard/deep only when the user asks for broader design-element exploration, multiple directions, or lawful source curation.
 - Visual signature: TODO - concrete typography, composition, color, spacing, imagery, motion, or interaction choices that make the interface distinct.
 - Signature move: TODO - one visible decision that makes the result recognizable, such as composition, type, evidence treatment, media, motion, or domain metaphor.
+- Domain-specific artifact: TODO - visible object, spatial model, timeline, map, instrument, cutaway, workbench, or content structure that could only belong to this domain.
+- Interaction or dynamism plan: TODO - interactive state, motion, reveal, comparison, live control, or static-dynamic substitute to verify.
+- Conventionality risk: TODO - the boring default this could fall into and how the design will avoid it.
 - Style commitment: TODO - 5-8 lines max; lock the visible art-direction choice before implementation.
 - First-viewport consequence: TODO - what visibly changes above the fold because of the style commitment.
 - Layout consequence: TODO - what structure rejects the generic header/cards/chart/table scaffold.
 - Typography consequence: TODO - what type scale, density, pairing, or rhythm does.
 - Color/material consequence: TODO - what color, contrast, texture, or surface language does beyond decoration.
 - Generic pattern rejected: TODO - the specific default pattern this design refuses.
+- Distinctiveness floor: TODO - at least two non-generic commitments that must be visible in screenshots.
 - Composition proof: TODO - first viewport hierarchy, mobile/desktop layout, and why the structure serves the primary workflow.
 - Impeccable route: TODO - primary and secondary Impeccable command(s), such as craft, polish, bolder, layout, typeset, adapt, harden, clarify, colorize, or animate; include every command triggered by the request or record a waiver.
 - Impeccable execution: TODO - actual Impeccable skill and command reference(s) loaded/run, checks applied, or explicit user waiver.

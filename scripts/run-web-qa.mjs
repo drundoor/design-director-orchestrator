@@ -4,33 +4,37 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  entryPathForContext,
+  fileUrlFor,
+  loadRunContext,
+  parseKeyValueArgs,
+  qaOutPathForContext,
+  renderConfigPathForContext,
+  toArray,
+} from "./lib/mockup-context.mjs";
+import { applyQaRecipes, inferRecipesForSurface, MOCKUP_VIEWPORTS } from "./lib/recipes.mjs";
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 function parseArgs(argv) {
-  const args = { out: ".design-director", depth: "2", timeout: "15000", final: false, draft: false, ci: false, static: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--help" || arg === "-h") args.help = true;
-    else if (arg === "--url") args.url = argv[++i];
-    else if (arg === "--config") args.config = argv[++i];
-    else if (arg === "--out") args.out = argv[++i];
-    else if (arg === "--viewports") args.viewports = argv[++i];
-    else if (arg === "--depth") args.depth = argv[++i];
-    else if (arg === "--timeout") args.timeout = argv[++i];
-    else if (arg === "--static") args.static = true;
-    else if (arg === "--draft") args.draft = true;
-    else if (arg === "--final") args.final = true;
-    else if (arg === "--ci" || arg === "--strict") args.ci = true;
-    else if (arg === "--qa-run-id") args.qaRunId = argv[++i];
-    else if (arg === "--app-build-id") args.appBuildId = argv[++i];
-    else throw new Error(`Unknown argument: ${arg}`);
-  }
+  const args = parseKeyValueArgs(argv, {
+    out: ".design-director",
+    depth: "2",
+    timeout: "15000",
+    final: false,
+    draft: false,
+    ci: false,
+    static: false,
+  });
+  args.recipe = toArray(args.recipe);
+  args.focus = toArray(args.focus);
+  args.outProvided = argv.includes("--out");
   return args;
 }
 
 function usage() {
-  return `Usage: run-web-qa.mjs (--url <url>|--config .design-director/render.config.json) [--out .design-director] [--static] [--draft|--final|--ci] [--viewports 375x700,1440x900] [--depth 2]
+  return `Usage: run-web-qa.mjs (--url <url>|--file <page.html>|--config .design-director/render.config.json|--context <run-context.json>) [--out .design-director] [--static] [--draft|--final|--ci] [--viewports 375x700,1440x900] [--viewport-preset mockup] [--recipe dashboard-basic] [--focus "main:decision-area"] [--depth 2]
 
 Runs discovery, render capture, DOM audit, visual audit, and qa-report with one
 shared qaRunId. Draft mode initializes screenshot notes, writes
@@ -52,23 +56,139 @@ function runStep(label, args, env, options = {}) {
   });
 }
 
+function parseViewports(args) {
+  if (args.viewports) {
+    return String(args.viewports).split(",").map((item) => {
+      const [width, height = "900"] = item.split("x");
+      return { width: Number(width), height: Number(height) };
+    });
+  }
+  if (args.viewportPreset === "mockup" || args.viewportPreset === "mobile-tablet-desktop") {
+    return MOCKUP_VIEWPORTS;
+  }
+  return [{ width: 375, height: 700 }, { width: 1440, height: 1000 }];
+}
+
+function dataCaveatFromPolicy(policy, existing = {}) {
+  if (!policy) return existing;
+  const key = String(policy).trim().toLowerCase();
+  if (key === "simulated" || key === "demo" || key === "sample") {
+    return {
+      ...existing,
+      truthStatus: "simulated",
+      sourceLabel: existing.sourceLabel || "Simulated data",
+      requiredInBrief: true,
+      requiredInQa: true,
+      uiPolicy: "source-row-caption-or-footnote",
+      prominentUiBannerAllowed: false,
+      stakeholderFacing: false,
+    };
+  }
+  if (key === "live" || key === "real" || key === "production") {
+    return {
+      ...existing,
+      truthStatus: "live",
+      sourceLabel: existing.sourceLabel || "Live data",
+      requiredInBrief: true,
+      requiredInQa: true,
+      uiPolicy: "local-source-label",
+      prominentUiBannerAllowed: false,
+      stakeholderFacing: existing.stakeholderFacing === true,
+    };
+  }
+  return {
+    ...existing,
+    truthStatus: key,
+    requiredInBrief: true,
+    requiredInQa: true,
+  };
+}
+
+async function writeJson(file, value) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function readJsonIfExists(file, fallback = null) {
+  try {
+    return JSON.parse(await fs.readFile(file, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return fallback;
+    throw error;
+  }
+}
+
 async function writeConfigFromUrl(configPath, args, qaRunId, appBuildId) {
-  const viewports = args.viewports
-    ? args.viewports.split(",").map((item) => {
-        const [width, height = "900"] = item.split("x");
-        return { width: Number(width), height: Number(height) };
-      })
-    : [{ width: 375, height: 700 }, { width: 1440, height: 1000 }];
   const config = {
     url: args.url,
-    qaProfile: args.static ? "static" : (args.final || args.ci) ? "final-qa" : "audit",
+    qaProfile: args.qaProfile || (args.profile === "static-mockup" ? "draft-static-mockup" : args.profile) || (args.static ? "static" : (args.final || args.ci) ? "final-qa" : "audit"),
+    profile: args.profile,
+    surface: args.surface,
     qaRunId,
     appBuildId,
-    viewports,
+    viewports: parseViewports(args),
     states: [{ name: "default" }],
+    dataCaveat: dataCaveatFromPolicy(args.caveatPolicy),
   };
-  await fs.mkdir(path.dirname(configPath), { recursive: true });
-  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  await writeJson(configPath, config);
+}
+
+async function writeEffectiveConfig(configPath, outDir, args, qaRunId, appBuildId) {
+  const original = await readJsonIfExists(configPath, null);
+  if (!original) throw new Error(`Could not read render config: ${configPath}`);
+  const surface = args.surface || original.surface || "";
+  const profile = args.profile || original.profile || "";
+  const qaProfile = args.qaProfile || original.qaProfile || (profile === "static-mockup" ? "draft-static-mockup" : profile);
+  const explicitRecipes = toArray(args.recipe).filter(Boolean);
+  const recipes = explicitRecipes.length ? explicitRecipes : inferRecipesForSurface(surface, `${profile} ${qaProfile}`);
+  const next = applyQaRecipes({
+    ...original,
+    qaRunId: original.qaRunId || qaRunId,
+    appBuildId: original.appBuildId || appBuildId,
+    surface: surface || original.surface,
+    profile: profile || original.profile,
+    qaProfile: qaProfile || original.qaProfile,
+    dataCaveat: dataCaveatFromPolicy(args.caveatPolicy, original.dataCaveat || {}),
+    viewports: args.viewports || args.viewportPreset ? parseViewports(args) : original.viewports,
+    viewportPreset: args.viewportPreset || original.viewportPreset,
+    singlePassDraftRequested: Boolean(args.singlePassDraft || original.singlePassDraftRequested),
+  }, {
+    recipes,
+    focus: toArray(args.focus),
+  });
+  const effectivePath = path.join(outDir, "render.config.effective.json");
+  await writeJson(effectivePath, next);
+  return effectivePath;
+}
+
+async function writeDraftDesignQuality(outDir, options) {
+  const config = await readJsonIfExists(options.configPath, {});
+  const artifact = {
+    version: 1,
+    mode: "draft",
+    finalArtifact: false,
+    acceptanceReady: false,
+    generatedAt: new Date().toISOString(),
+    qaRunId: options.qaRunId,
+    appBuildId: options.appBuildId,
+    surface: config.surface || options.args.surface || null,
+    profile: config.profile || options.args.profile || null,
+    qaProfile: config.qaProfile || options.args.qaProfile || null,
+    recipes: config.recipes || [],
+    focus: config.focus || [],
+    dataCaveat: config.dataCaveat || null,
+    singlePassDraftRequested: Boolean(config.singlePassDraftRequested),
+    caveat: "Draft design-quality evidence is not final acceptance. Final acceptance uses design-quality.json and qa:web:final.",
+    qaSummary: options.qaSummary,
+    evidence: {
+      designQa: "design-qa.json",
+      renderResults: "render-results.json",
+      domAudit: "dom-audit.json",
+      visualAudit: "visual-consistency-audit.json",
+      screenshotNotes: "screenshot-notes.md",
+    },
+  };
+  await writeJson(path.join(outDir, "design-quality.draft.json"), artifact);
 }
 
 async function readQaSummary(outDir) {
@@ -98,9 +218,22 @@ async function main() {
     console.log(usage());
     return;
   }
-  if (!args.url && !args.config) throw new Error("Provide --url or --config");
+  let runContext = null;
+  if (args.file) args.url = fileUrlFor(path.resolve(args.file));
+  if (args.context) {
+    runContext = await loadRunContext(args.context);
+    if (!args.outProvided) args.out = qaOutPathForContext(runContext);
+    if (!args.config) args.config = renderConfigPathForContext(runContext);
+    if (!args.url) args.url = fileUrlFor(entryPathForContext(runContext));
+    if (!args.surface) args.surface = runContext.surface;
+    if (!args.profile) args.profile = runContext.profile;
+    if (!args.qaRunId) args.qaRunId = runContext.qaRunId;
+    if (!args.static && runContext.mode?.includes("static")) args.static = true;
+  }
+  if (!args.url && !args.config) throw new Error("Provide --url, --file, --config, or --context");
   if (args.draft && (args.final || args.ci)) throw new Error("--draft cannot be combined with --final or --ci");
   if (args.final && args.ci) throw new Error("--final and --ci are separate modes; use one");
+  const finalLike = args.final || args.ci;
 
   const outDir = path.resolve(args.out);
   const projectRoot = path.resolve(process.cwd());
@@ -115,8 +248,11 @@ async function main() {
   };
   let configPath = args.config ? path.resolve(args.config) : path.join(outDir, "render.config.json");
   if (!args.config) await writeConfigFromUrl(configPath, args, qaRunId, appBuildId);
+  configPath = await writeEffectiveConfig(configPath, outDir, args, qaRunId, appBuildId);
+  if (args.singlePassDraft && !finalLike) {
+    console.log("qa:web: single-pass draft requested; using proven multi-script path until recipe parity is acceptance-tested");
+  }
 
-  const finalLike = args.final || args.ci;
   if (!args.static) {
     const discoverArgs = ["scripts/discover-states.mjs", "--config", configPath, "--out", outDir, "--depth", args.depth, "--timeout", args.timeout];
     if (args.viewports) discoverArgs.push("--viewports", args.viewports, "--viewport-mode", "all");
@@ -139,6 +275,9 @@ async function main() {
   if (!finalLike) reportArgs.push("--partial", "--allow-partial-exit-zero");
   const reportCode = await runStep("merge QA report", reportArgs, env, { allowFailure: !args.final });
   const qaSummary = await readQaSummary(outDir);
+  if (!finalLike) {
+    await writeDraftDesignQuality(outDir, { args, configPath, qaRunId, appBuildId, qaSummary });
+  }
   console.log(`qa:web: qaRunId=${qaRunId}`);
   console.log(`qa:web: status=${qaSummary.status}`);
   console.log(`qa:web: qaMode=${qaSummary.qaMode}`);

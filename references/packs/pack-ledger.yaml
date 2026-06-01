@@ -1,0 +1,18 @@
+version: 1
+policy: >
+  Local reference packs are seed material only. They name sources to consult and
+  verification gates to run. They do not permit copying third-party assets,
+  templates, layouts, code, brand skins, screenshots, or animation.
+license_posture:
+  standards_and_docs: "Reference and cite; do not copy long text."
+  design_systems: "Use for mechanics unless the project has adopted the system."
+  read_only_inspiration: "Extract principles only; result must not be mistaken for the source."
+  assets_fonts_templates: "Require exact license record before use."
+packs:
+  - dashboard
+  - data-table
+  - form-search-filter
+  - mobile-card
+  - marketing-web
+  - native-app
+  - motion

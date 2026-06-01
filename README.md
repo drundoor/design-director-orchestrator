@@ -22,8 +22,9 @@ It is for work where "functional but bland" is not good enough.
 
 - Routes broad web/front-end work through Impeccable by default, then records
   what actually ran or what the user explicitly waived.
-- Requires a style posture, signature move, first-viewport consequence, and
-  rejected generic pattern before broad implementation starts.
+- Requires a style posture, signature move, domain-specific artifact,
+  interaction/dynamism plan, first-viewport consequence, and rejected generic
+  pattern before broad implementation starts.
 
 ### Builds From References
 
@@ -180,19 +181,41 @@ npm run brief:new -- --surface marketing-web
 npm run research:ledger
 ```
 
+For a standalone static mockup or benchmark screen, use the isolated fast path:
+
+```sh
+npm run mockup:init -- --target-root /absolute/work/folder --slug support-queue-dashboard --surface dashboard
+npm run reference:seed -- --context /absolute/work/folder/.design-director/mockups/support-queue-dashboard/run-context.json --pack dashboard
+npm run mockup:assert -- --context /absolute/work/folder/.design-director/mockups/support-queue-dashboard/run-context.json
+npm run qa:web:draft -- --context /absolute/work/folder/.design-director/mockups/support-queue-dashboard/run-context.json --viewport-preset mockup --recipe dashboard-basic
+```
+
+That path writes `design-quality.draft.json`, not final acceptance evidence.
+Use it to move quickly, then run final QA when the artifact is meant to ship.
+
 For revamps and new builds, fill in the `Design Quality Bar` section before
 implementation. It asks for the design thesis, primary workflow, visual
-signature, style posture, signature move, Impeccable route, Impeccable
+signature, style posture, signature move, domain-specific artifact,
+interaction/dynamism plan, conventionality risk, Impeccable route, Impeccable
 execution, design exploration depth, style commitment, visible consequences,
 reference discovery plan, composition proof, and anti-generic checks. That is
-the part that prevents a dashboard from becoming "metric cards plus a chart" or
-a marketing site from becoming a generic hero, feature grid, or pile of
-decorative pills.
+the part that prevents a dashboard from becoming "metric cards plus a chart," a
+tool from becoming plain panels, or a marketing site from becoming a generic
+hero, feature grid, or pile of decorative pills.
 
 For ordinary demo or simulated data, label the caveat in a source row, chart
 caption, footnote, or local annotation. Do not make a giant warning banner or
 visual badge unless the user's domain, legal risk, safety risk, or instructions
 call for that level of prominence.
+
+Useful support commands:
+
+```sh
+npm run peer:check -- --write-markdown
+npm run peer:validate -- --design-quality .design-director/design-quality.json
+npm run source:caveat -- --config .design-director/render.config.json
+npm run reference:seed -- --pack dashboard --pack mobile-card
+```
 
 For a web app draft QA run:
 

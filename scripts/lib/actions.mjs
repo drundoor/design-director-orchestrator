@@ -65,6 +65,19 @@ export async function runActions(page, actions = [], options = {}) {
   const artifacts = options.artifacts || [];
   for (const [actionIndex, action] of actions.entries()) {
     const type = action.type || action.action;
+    if (action.optional && action.selector) {
+      const count = await page.locator(action.selector).count().catch(() => 0);
+      if (count === 0) {
+        artifacts.push({
+          type: "optional-action-skipped",
+          selector: action.selector,
+          actionIndex,
+          reason: "selector not found",
+          action,
+        });
+        continue;
+      }
+    }
     if (type === "wait") {
       await page.waitForTimeout(action.ms ?? action.waitMs ?? 250);
     } else if (type === "waitForSelector") {

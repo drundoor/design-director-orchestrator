@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "policy": "These packs seed reference questions. They do not grant permission to copy third-party code, assets, layouts, screenshots, or brand styling.",
+  "packs": [
+    {
+      "name": "dashboard",
+      "file": "dashboard.md",
+      "aliases": ["analytics", "report", "decision-dashboard"],
+      "description": "Operational dashboard references for decision hierarchy, data tables, and chart semantics.",
+      "sources": [
+        {
+          "source": "WAI and WCAG visual/focus guidance",
+          "tier": "S1 standards",
+          "role": "accessibility and behavior",
+          "chosen_for": "focus visibility, contrast, and non-color-only communication",
+          "extract": "states must be keyboard-visible, legible, and not color-only",
+          "do_not_copy": "example page styling",
+          "local_mapping": "filter controls, chart legends, and active row states",
+          "verification_gate": "keyboard focus and contrast checks in rendered QA"
+        },
+        {
+          "source": "Carbon dashboard and data-table guidance",
+          "tier": "S2 design system",
+          "role": "dense data mechanics",
+          "chosen_for": "tables, chart hierarchy, and enterprise density",
+          "extract": "use clear hierarchy, explicit units, and predictable table behavior",
+          "do_not_copy": "Carbon brand skin or component code unless the project uses Carbon",
+          "local_mapping": "dashboard decision area, metric hierarchy, and tabular evidence",
+          "verification_gate": "focused chart/table screenshots and font-size consistency"
+        },
+        {
+          "source": "Practical Typography",
+          "tier": "S4 inspiration",
+          "role": "taste and reading rhythm",
+          "chosen_for": "dense reading, hierarchy, and line-length judgment",
+          "extract": "typography must make scanning easier, not just larger",
+          "do_not_copy": "site layout or copy",
+          "local_mapping": "title, metric, label, and table text roles",
+          "verification_gate": "visual audit for peer typography drift"
+        }
+      ]
+    },
+    {
+      "name": "data-table",
+      "file": "data-table.md",
+      "aliases": ["table", "catalog", "reference-list"],
+      "description": "Table and dense reference UI references for sorting, scanning, and row actions.",
+      "sources": [
+        {
+          "source": "WAI APG table/grid and disclosure guidance",
+          "tier": "S1 standards",
+          "role": "interaction correctness",
+          "chosen_for": "keyboard and semantic expectations",
+          "extract": "interactive grids need clear focus and predictable controls",
+          "do_not_copy": "example styling",
+          "local_mapping": "sort, filter, row expansion, and details controls",
+          "verification_gate": "open controls and inspect overlay/focus evidence"
+        },
+        {
+          "source": "Cloudscape table and collection patterns",
+          "tier": "S2 design system",
+          "role": "enterprise table mechanics",
+          "chosen_for": "filtering, sorting, pagination, density, and empty states",
+          "extract": "table controls should be visible, labeled, and near the data they affect",
+          "do_not_copy": "Cloudscape visual identity or code unless adopted",
+          "local_mapping": "table toolbar and state layout",
+          "verification_gate": "desktop and mobile screenshots of table controls"
+        },
+        {
+          "source": "GOV.UK Design System",
+          "tier": "S1/S4 reference",
+          "role": "plain-language clarity",
+          "chosen_for": "labels and status words that work under pressure",
+          "extract": "language should be specific and unambiguous",
+          "do_not_copy": "government page styling",
+          "local_mapping": "status labels, action text, and helper copy",
+          "verification_gate": "copy review for generic or ambiguous labels"
+        }
+      ]
+    },
+    {
+      "name": "form-search-filter",
+      "file": "form-search-filter.md",
+      "aliases": ["search", "filter", "dropdown", "combobox", "form"],
+      "description": "Search, filter, form, combobox, and overlay references.",
+      "sources": [
+        {
+          "source": "WAI APG combobox/listbox/menu guidance",
+          "tier": "S1 standards",
+          "role": "overlay behavior authority",
+          "chosen_for": "keyboard open/close, focus, and selection patterns",
+          "extract": "opened overlays must be reachable, visible, and dismissible",
+          "do_not_copy": "example styling",
+          "local_mapping": "search suggestions, theme pickers, filters, and menus",
+          "verification_gate": "active-state screenshot with overlay above adjacent containers"
+        },
+        {
+          "source": "React Aria component behavior docs",
+          "tier": "S2 behavior reference",
+          "role": "accessible unstyled mechanics",
+          "chosen_for": "input, select, popover, and listbox semantics",
+          "extract": "behavior and semantics are separable from visual skin",
+          "do_not_copy": "code unless dependency/license has been accepted",
+          "local_mapping": "search field and filter popover behavior",
+          "verification_gate": "keyboard and pointer state QA"
+        },
+        {
+          "source": "Inclusive Components",
+          "tier": "S1/S4 reference",
+          "role": "interaction clarity",
+          "chosen_for": "simple robust component decisions",
+          "extract": "visible affordances beat hidden cleverness",
+          "do_not_copy": "article examples verbatim",
+          "local_mapping": "dropdown affordance, focus treatment, and helper copy",
+          "verification_gate": "visual check for camouflaged controls"
+        }
+      ]
+    },
+    {
+      "name": "mobile-card",
+      "file": "mobile-card.md",
+      "aliases": ["mobile-list", "mobile-summary", "mobile-detail"],
+      "description": "Mobile cards, lists, density, and responsive hierarchy references.",
+      "sources": [
+        {
+          "source": "WCAG reflow, target size, and focus guidance",
+          "tier": "S1 standards",
+          "role": "mobile usability constraints",
+          "chosen_for": "tap targets, overflow, text fit, and focus states",
+          "extract": "content must reflow without hiding controls or forcing horizontal scroll",
+          "do_not_copy": "example styling",
+          "local_mapping": "mobile list/card tap zones and text grouping",
+          "verification_gate": "320/375/414-width rendered QA"
+        },
+        {
+          "source": "Material Design lists and cards",
+          "tier": "S2 design system",
+          "role": "mobile grouping mechanics",
+          "chosen_for": "metadata placement, actions, and density",
+          "extract": "metadata should sit near the thing it describes",
+          "do_not_copy": "Material visual skin unless project uses Material",
+          "local_mapping": "image, title, metadata, score, and action grouping",
+          "verification_gate": "mobile screenshot inspection for related-item proximity"
+        },
+        {
+          "source": "60fps.design",
+          "tier": "S4 inspiration",
+          "role": "mobile motion and polish critique",
+          "chosen_for": "touch-state feel and responsive transitions",
+          "extract": "motion should clarify state change and respect reduced motion",
+          "do_not_copy": "specific animations or assets",
+          "local_mapping": "card expansion, details reveal, and list state transitions",
+          "verification_gate": "reduced-motion and active-state QA when motion exists"
+        }
+      ]
+    },
+    {
+      "name": "marketing-web",
+      "file": "marketing-web.md",
+      "aliases": ["landing", "editorial", "brand-web", "product", "product-web", "product-site"],
+      "description": "Marketing/editorial references for first-viewport art direction and conversion flow.",
+      "sources": [
+        {
+          "source": "WCAG and HTML semantics",
+          "tier": "S1 standards",
+          "role": "accessible page structure",
+          "chosen_for": "headings, landmarks, contrast, and responsive reading",
+          "extract": "visual drama cannot break reading order or legibility",
+          "do_not_copy": "example styling",
+          "local_mapping": "hero, navigation, CTA, and content sections",
+          "verification_gate": "mobile/desktop screenshots plus DOM audit"
+        },
+        {
+          "source": "Awwwards and curated editorial sites",
+          "tier": "S4 inspiration",
+          "role": "art-direction challenge",
+          "chosen_for": "avoiding generic hero/card scaffolds",
+          "extract": "choose a memorable composition or media treatment",
+          "do_not_copy": "screens, layouts, copy, assets, animation, or brand skins",
+          "local_mapping": "first-viewport signature move",
+          "verification_gate": "result cannot be mistaken for the reference"
+        },
+        {
+          "source": "Practical Typography",
+          "tier": "S4 inspiration",
+          "role": "editorial typography",
+          "chosen_for": "reading rhythm and type hierarchy",
+          "extract": "type choices should fit the content and audience",
+          "do_not_copy": "site design or copy",
+          "local_mapping": "headline, subhead, body, and CTA hierarchy",
+          "verification_gate": "screenshot inspection for hierarchy and fit"
+        }
+      ]
+    },
+    {
+      "name": "native-app",
+      "file": "native-app.md",
+      "aliases": ["mobile-app", "ios-app", "android-app", "native-mobile"],
+      "description": "Native iOS/Android references for platform conventions and visual QA.",
+      "sources": [
+        {
+          "source": "Apple Human Interface Guidelines",
+          "tier": "S1 platform authority",
+          "role": "iOS platform conventions",
+          "chosen_for": "navigation, touch, Dynamic Type, and native controls",
+          "extract": "platform conventions beat imported web aesthetics",
+          "do_not_copy": "Apple app visuals or proprietary assets",
+          "local_mapping": "iOS screen hierarchy and interaction states",
+          "verification_gate": "simulator screenshots and hierarchy evidence"
+        },
+        {
+          "source": "Material Design",
+          "tier": "S1 platform authority",
+          "role": "Android platform conventions",
+          "chosen_for": "Material components, state layers, typography, and motion",
+          "extract": "Android UI must work across font scale, IME, light, and dark",
+          "do_not_copy": "sample app branding or assets",
+          "local_mapping": "Compose/View hierarchy and controls",
+          "verification_gate": "emulator screenshots, UI tree, logs, and profile coverage"
+        },
+        {
+          "source": "60fps.design",
+          "tier": "S4 inspiration",
+          "role": "native motion vocabulary",
+          "chosen_for": "mobile transition critique",
+          "extract": "motion should communicate state and hierarchy",
+          "do_not_copy": "specific app recordings or animations",
+          "local_mapping": "screen transition and control feedback",
+          "verification_gate": "reduced-motion and interaction review"
+        }
+      ]
+    },
+    {
+      "name": "motion",
+      "file": "motion.md",
+      "description": "Motion references for timelines, interruption, reduced motion, and visual polish.",
+      "sources": [
+        {
+          "source": "MDN CSS animation, transition, and Web Animations docs",
+          "tier": "S1 platform authority",
+          "role": "browser behavior",
+          "chosen_for": "performant, interruptible, accessible motion",
+          "extract": "motion must support reduced-motion preferences",
+          "do_not_copy": "demo styling",
+          "local_mapping": "transition and state-change behavior",
+          "verification_gate": "reduced-motion and no-jank checks"
+        },
+        {
+          "source": "GSAP docs",
+          "tier": "S2 implementation reference",
+          "role": "timeline mechanics",
+          "chosen_for": "sequenced or scroll-driven animation",
+          "extract": "use a timeline when coordination is the actual requirement",
+          "do_not_copy": "demo designs or proprietary plugin usage without license review",
+          "local_mapping": "choreographed reveal, chart transition, or guided attention",
+          "verification_gate": "animation state QA and performance review"
+        },
+        {
+          "source": "60fps.design",
+          "tier": "S4 inspiration",
+          "role": "motion taste critique",
+          "chosen_for": "microinteraction vocabulary and restraint",
+          "extract": "motion should make the interface easier to understand",
+          "do_not_copy": "recorded examples or exact choreography",
+          "local_mapping": "hover, focus, drawer, card, and navigation transitions",
+          "verification_gate": "state video/screenshot notes when motion is material"
+        }
+      ]
+    }
+  ]
+}

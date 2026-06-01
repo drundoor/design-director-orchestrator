@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/drundoor/design-director-orchestrator/blob/main/schemas/data-caveat.schema.json",
+  "title": "Design Director Data Caveat Policy",
+  "type": "object",
+  "required": ["truthStatus", "requiredInBrief", "requiredInQa", "uiPolicy"],
+  "additionalProperties": true,
+  "properties": {
+    "truthStatus": {
+      "enum": ["live", "real", "simulated", "demo", "sample", "unknown", "mixed", "static"]
+    },
+    "sourceLabel": { "type": "string" },
+    "requiredInBrief": { "type": "boolean" },
+    "requiredInQa": { "type": "boolean" },
+    "uiPolicy": {
+      "enum": [
+        "local-source-label",
+        "source-row-caption-or-footnote",
+        "subtle-footer-or-local-caption",
+        "prominent-warning",
+        "none"
+      ]
+    },
+    "prominentUiBannerAllowed": { "type": "boolean" },
+    "stakeholderFacing": { "type": "boolean" },
+    "reason": { "type": "string" }
+  }
+}

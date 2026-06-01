@@ -26,6 +26,18 @@ Before implementation, the brief must name:
 - Signature move: the one concrete design decision that makes this output
   recognizable, such as an unusual composition, evidence treatment, type system,
   motion pattern, media treatment, domain metaphor, or interaction model.
+- Domain-specific artifact: the visible thing that could only belong to this
+  product/domain, such as a route board, cutaway object, workbench, ticket wall,
+  calibration sheet, spatial map, dossier, timeline, canvas, or instrumented
+  checklist. A generic card, metric, hero, or form does not count.
+- Interaction or dynamism plan: the specific interactive state, motion,
+  progressive reveal, spatial comparison, live control, or static visual
+  dynamism that will make the surface feel designed rather than just arranged.
+  If the user requested a purely static artifact, name the static substitute
+  that creates energy, such as an annotated object, layered map, stepped
+  timeline, before/after strip, or compositional tension.
+- Conventionality risk: what would make this result too safe, expected, or
+  template-like, and how the design will avoid that before implementation.
 - Style commitment: a compact pre-build commitment, 5-8 lines maximum, naming
   visible consequences for the first viewport, layout, typography,
   color/material, and the generic pattern being rejected.
@@ -102,6 +114,31 @@ color tweak is not enough. At least one of these should be intentionally strong:
 - domain metaphor or spatial model
 - navigation/information architecture pattern
 
+## Distinctiveness Floor
+
+The default result should not be merely tidy. For broad design work, set a
+distinctiveness floor before implementation and reject the output when
+screenshots show a conventional composition with only safe spacing, safe type,
+safe cards, and safe colors.
+
+At least two of these must be true, unless the user explicitly asks for a
+deliberately plain utility:
+
+- The macrostructure is domain-shaped rather than a generic header plus cards.
+- The first viewport contains a product/domain artifact, not just copy and UI
+  containers.
+- Typography, scale, or reading rhythm has a recognizable point of view.
+- Color/material treatment does product-specific work beyond decoration.
+- The primary interaction, filter, reveal, transition, or state change is part
+  of the design idea and is verified.
+- The layout uses a meaningful spatial metaphor, map, timeline, instrument,
+  board, workbench, or cutaway.
+
+If the honest screenshot review says "competent but conventional," final
+acceptance fails even when usability checks pass. The remediation is not more
+ornament. Pick a stronger posture, revise the macrostructure, and rerun the
+focused screenshot review.
+
 ## Efficient Style Commitment
 
 The default path should improve taste without turning every job into a long
@@ -115,6 +152,11 @@ research project. Before implementation, write one compact style commitment:
 - Color/material consequence: what color, contrast, texture, or surface language
   does beyond decoration.
 - Generic pattern rejected: the specific default pattern this will not use.
+- Domain-specific artifact: the non-generic object, structure, or metaphor that
+  appears in the screen.
+- Interaction/dynamism: the interactive or static-dynamic move to verify.
+- Conventionality risk: the boring default this design is most likely to fall
+  into and how the implementation avoids it.
 
 Keep this commitment to 5-8 lines. It is not a moodboard. It is a cheap
 decision lock. QA then checks whether the screenshots visibly honor it. If the
@@ -316,6 +358,27 @@ machine-readable contract that keeps the brief from passing on prose alone:
         "screenshot-notes.md#screenshots/primary-chart-375x220.png"
       ]
     },
+    "distinctivenessVisible": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "domainSpecificityVisible": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "dynamicStateOrMotionConsidered": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
     "styleCommitmentHonored": {
       "verdict": "pass",
       "evidence": [
@@ -353,7 +416,8 @@ machine-readable contract that keeps the brief from passing on prose alone:
           "decorativePills",
           "fakeChrome",
           "stockHero",
-          "weakHierarchy"
+          "weakHierarchy",
+          "domainSpecificArtifact"
         ]
       }
     }
@@ -369,7 +433,7 @@ machine-readable contract that keeps the brief from passing on prose alone:
 }
 ```
 
-All five `designQuality` verdicts must be `pass` for final acceptance. Each
+All `designQuality` verdicts must be `pass` for final acceptance. Each
 verdict must carry its own evidence array, every pointer must resolve to a
 current screenshot-note section, and `reviewedScreenshotHashes` must match the
 current screenshot files. `generatedAt` must be current, parseable, and not in
@@ -416,6 +480,10 @@ Must feel like a real operational tool, not a generic analytics mockup.
   local annotations. Do not turn a simulated-data caveat into the visual
   signature or a dominant warning banner unless legal, safety, or user
   instructions require that prominence.
+- Simulated-data caveats, source labels, nav counters, and generic section
+  labels must not be rendered as pill/chip/badge capsules. Use captions,
+  source rows, footnotes, squared counters, or plain text. Reserve status tags
+  for concrete operational states and keep them secondary.
 - Tables need density, row rhythm, status language, and scanning behavior that
   match the dashboard's usage frequency.
 - Avoid fake dashboard chrome, decorative sidebars, equal-weight card grids,
@@ -508,6 +576,9 @@ aesthetic judgment:
 - Does the output clearly express the design thesis?
 - Does it clearly express the named style posture?
 - Is the signature move visible in the first meaningful screen?
+- Is there a visible domain-specific artifact, spatial model, interaction,
+  motion choice, or static-dynamic composition that makes the work less
+  conventional?
 - Is the first viewport stronger than a generic scaffold?
 - Are typography, spacing, color, and imagery doing product-specific work?
 - Do mobile and desktop both look intentionally composed?

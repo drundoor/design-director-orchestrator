@@ -94,16 +94,19 @@ Use fewer only when the surface clearly does not need them, and record why.
 - Data/board checks when relevant.
 - Aesthetic judgment for `concept`, `revamp`, and greenfield work: the
   screenshot notes or QA notes must state whether the result expresses the
-  design thesis, style posture, signature move, style commitment, and avoids a
-  generic scaffold, including whether Impeccable and Hallmark or an equivalent
-  anti-slop checklist were used.
+  design thesis, style posture, signature move, domain-specific artifact,
+  interaction/dynamism plan, style commitment, and avoids a generic scaffold,
+  including whether Impeccable and Hallmark or an equivalent anti-slop
+  checklist were used.
 - Structured aesthetic verdict for broad final QA: `design-quality.json` must
   mark `thesisExpressed`, `stylePostureExpressed`, `signatureMoveVisible`,
-  `styleCommitmentHonored`, and `genericScaffoldAvoided` as `pass`. Each
-  verdict needs its own evidence pointer to a current screenshot-note section,
-  and the artifact must record the same `qaRunId`, current
-  `screenshotNotesHash`, and current `reviewedScreenshotHashes`.
-  `design-quality.json.generatedAt` must be current and not future-dated.
+  `distinctivenessVisible`, `domainSpecificityVisible`,
+  `dynamicStateOrMotionConsidered`, `styleCommitmentHonored`, and
+  `genericScaffoldAvoided` as `pass`. Each verdict needs its own evidence
+  pointer to a current screenshot-note section, and the artifact must record the
+  same `qaRunId`, current `screenshotNotesHash`, and current
+  `reviewedScreenshotHashes`. `design-quality.json.generatedAt` must be current
+  and not future-dated.
 - Reference discovery evidence for broad design work: the brief, research
   ledger, or QA notes must record which external standards, design systems,
   product/design references, assets, fonts, or motion sources were checked,

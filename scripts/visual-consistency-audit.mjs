@@ -554,8 +554,9 @@ async function main() {
 
               // Generic decorative pills/capsules are a common AI-slop pattern:
               // small rounded labels that add visual busyness without a real
-              // component role. This is a warning because status tags can be
-              // valid, but they need an explicit reason in the design review.
+              // component role. Source/data caveats and nav counters are never
+              // acceptable as pills; semantic status tags are warning-only and
+              // must be justified in the design review.
               for (const el of all) {
                 const tag = el.tagName.toLowerCase();
                 if (["button", "a", "input", "select", "textarea", "option"].includes(tag)) continue;
@@ -575,10 +576,32 @@ async function main() {
                 if (!hasVisibleFill && !hasVisibleBorder) continue;
                 const signature = `${classText(el)} ${el.id || ""} ${role || ""}`.toLowerCase();
                 if (!/(pill|chip|badge|tag|status|trend|delta|label|source|meta)/.test(signature)) continue;
-                addFinding("warning", {
-                  type: "generic-pill-capsule",
+                const combined = `${signature} ${text}`.toLowerCase();
+                const inNavigation = Boolean(el.closest("nav, [role='navigation']"));
+                const sourceOrCaveatPill = /\b(source|caveat|simulated|demo|sample)\b/.test(signature)
+                  || /\b(source|data source|simulated data|demo data|sample data|refreshed|last updated|not production)\b/.test(combined);
+                const navCountPill = inNavigation && /\b(count|counter|badge|pill|chip|tag)\b/.test(signature) && /^[\d+]+$/.test(text.trim());
+                const semanticStatus = /\b(status|risk|sla|breach|surge|tier|vip|gap|velocity|stable|healthy|critical|priority|open|closed|blocked|warning|error|success|danger|active|inactive|aging|backlog|staff|staffing|deflect|deflectable|complex|case|cases|trend|delta)\b/.test(combined);
+                let bucket = "warning";
+                let type = "semantic-pill-capsule";
+                let message = "Semantic capsule/pill label found; verify it is necessary and not the dominant visual language.";
+                if (sourceOrCaveatPill) {
+                  bucket = "blocker";
+                  type = "source-caveat-pill";
+                  message = "Source, simulated-data, and caveat labels must not be styled as capsule pills; use a source row, caption, footnote, or local annotation.";
+                } else if (navCountPill) {
+                  bucket = "blocker";
+                  type = "nav-count-pill";
+                  message = "Navigation counters must not use generic capsule/pill styling; use plain counts, aligned columns, or squared counters.";
+                } else if (!semanticStatus) {
+                  bucket = "blocker";
+                  type = "generic-pill-capsule";
+                  message = "Generic non-interactive capsule/pill label found; remove it or replace it with a purposeful status/control treatment.";
+                }
+                addFinding(bucket, {
+                  type,
                   selector: selectorFor(el),
-                  message: "Non-interactive capsule/pill label found; verify it serves a real component or status role instead of generic decoration.",
+                  message,
                   samples: [{
                     text,
                     selector: selectorFor(el),
