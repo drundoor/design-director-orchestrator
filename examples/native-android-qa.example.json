@@ -28,14 +28,34 @@
       "result": "pass"
     },
     {
-      "state": "filter-menu-open",
-      "profiles": ["dark", "font-scale-large", "ime-focused"],
+      "state": "home-dark",
+      "profile": "dark",
       "theme": "dark",
+      "fontScale": 1,
+      "displaySize": "default",
+      "screenshot": ".design-director/android-home-dark.png",
+      "uiTree": ".design-director/android-home-dark.xml",
+      "result": "pass"
+    },
+    {
+      "state": "home-large-font",
+      "profile": "font-scale-large",
+      "theme": "light",
       "fontScale": 1.3,
-      "displaySize": "large",
+      "displaySize": "default",
+      "screenshot": ".design-director/android-home-large-font.png",
+      "uiTree": ".design-director/android-home-large-font.xml",
+      "result": "pass"
+    },
+    {
+      "state": "filter-menu-open",
+      "profile": "ime-focused",
+      "theme": "light",
+      "fontScale": 1,
+      "displaySize": "default",
       "ime": true,
-      "screenshot": ".design-director/android-filter-dark-large.png",
-      "uiTree": ".design-director/android-filter-dark-large.xml",
+      "screenshot": ".design-director/android-filter-ime.png",
+      "uiTree": ".design-director/android-filter-ime.xml",
       "result": "pass"
     }
   ],

@@ -9,7 +9,7 @@ evidence, not a checklist claim.
 - scheme and configuration
 - simulator or device name
 - iOS version
-- appearance: light, dark, or both
+- appearance: light or dark; capture separate entries instead of using `both`
 - content size category
 - orientation and windowing mode when relevant
 - command or tool call used to build/run/capture
@@ -44,7 +44,8 @@ acceptance evidence.
 Required profile coverage is inferred from concrete metadata, not from
 `profile` or `profiles` labels alone. For standard QA, light, dark, large text,
 and keyboard-focused states must be backed by matching fields such as
-`appearance`, `contentSize`, `keyboard`, and `focusedEditable`. Use
+`appearance`, `contentSize`, `keyboard`, and `focusedEditable`. Each required
+profile needs unique screenshot and UI hierarchy evidence. Use
 `notApplicableProfiles` only
 with a reason and hierarchy evidence that proves a profile is irrelevant, such
 as a read-only screen with no editable fields.

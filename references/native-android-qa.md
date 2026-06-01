@@ -9,7 +9,7 @@ evidence across emulator/device states, not a checklist claim.
 - emulator or device name
 - API level
 - density, display size, and font scale
-- theme: light, dark, or both
+- theme: light or dark; capture separate entries instead of using `both`
 - navigation mode when relevant
 - command or tool call used to build/run/capture
 
@@ -45,6 +45,7 @@ metadata are not acceptance evidence.
 Required profile coverage is inferred from concrete metadata, not from
 `profile` or `profiles` labels alone. For standard QA, light, dark, large font
 scale, and IME-focused states must be backed by matching fields such as
-`theme`, `fontScale`, and `ime`. Use `notApplicableProfiles` only with a reason
-and UI tree evidence that proves a profile is irrelevant, such as a read-only
-screen with no editable fields.
+`theme`, `fontScale`, and `ime`. Each required profile needs unique screenshot
+and UI tree evidence. Use `notApplicableProfiles` only with a reason and UI tree
+evidence that proves a profile is irrelevant, such as a read-only screen with no
+editable fields.

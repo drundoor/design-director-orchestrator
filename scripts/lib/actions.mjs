@@ -150,8 +150,12 @@ export async function runActions(page, actions = [], options = {}) {
       const screenshotDir = options.screenshotDir || action.outDir || ".design-director/screenshots";
       await fs.mkdir(screenshotDir, { recursive: true });
       const viewportSlug = options.viewport ? `${options.viewport.width}x${options.viewport.height}` : "viewport";
-      const name = action.name || `${slug(options.stateName || "state")}-action-${actionIndex + 1}-${slug(action.selector)}-${viewportSlug}.png`;
-      const file = path.join(screenshotDir, name);
+      const nameSlug = slug(action.name || action.selector || "element");
+      const stateSlug = slug(options.stateName || "state");
+      const stateIndexSlug = Number.isInteger(options.stateIndex) ? String(options.stateIndex + 1) : "state-index";
+      const routeHash = options.routeHash || "route";
+      const fileName = `${stateSlug}-${stateIndexSlug}-${routeHash}-${viewportSlug}-action-${actionIndex + 1}-${nameSlug}.png`;
+      const file = path.join(screenshotDir, fileName);
       await locatorFor(page, action.selector).screenshot({ path: file, timeout: action.timeout ?? timeout });
       const artifactPath = options.artifactPathBase ? relativeArtifactPath(options.artifactPathBase, file) : file;
       artifacts.push({ type: "element-screenshot", path: artifactPath, selector: action.selector, actionIndex, viewport: options.viewport || null, action });

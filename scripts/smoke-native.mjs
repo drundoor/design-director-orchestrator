@@ -30,8 +30,10 @@ async function writeJson(file, value) {
 
 async function main() {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "design-director-native-smoke-"));
-  await fs.writeFile(path.join(out, "screen.png"), pngBytes());
-  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  for (const name of ["home-light", "home-dark", "home-large", "home-keyboard"]) {
+    await fs.writeFile(path.join(out, `${name}.png`), pngBytes());
+    await fs.writeFile(path.join(out, `${name}-hierarchy.json`), JSON.stringify({ windows: [] }));
+  }
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
   const reportPath = path.join(out, "native-ios-qa.json");
   await writeJson(reportPath, {
@@ -49,8 +51,8 @@ async function main() {
         appearance: "light",
         contentSize: "default",
         orientation: "portrait",
-        screenshot: "screen.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-light.png",
+        uiHierarchy: "home-light-hierarchy.json",
         result: "pass"
       },
       {
@@ -58,8 +60,8 @@ async function main() {
         appearance: "dark",
         contentSize: "default",
         orientation: "portrait",
-        screenshot: "screen.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-dark.png",
+        uiHierarchy: "home-dark-hierarchy.json",
         result: "pass"
       },
       {
@@ -67,8 +69,8 @@ async function main() {
         appearance: "light",
         contentSize: "accessibilityLarge",
         orientation: "portrait",
-        screenshot: "screen.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-large.png",
+        uiHierarchy: "home-large-hierarchy.json",
         result: "pass"
       },
       {
@@ -77,8 +79,8 @@ async function main() {
         contentSize: "default",
         orientation: "portrait",
         keyboard: true,
-        screenshot: "screen.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-keyboard.png",
+        uiHierarchy: "home-keyboard-hierarchy.json",
         result: "pass"
       }
     ],

@@ -143,12 +143,15 @@ export function configHashFor(config = {}, effective = {}) {
 }
 
 export function qaRunMetadata(config = {}, effective = {}, startedAt = new Date().toISOString()) {
-  const configHash = configHashFor(config, effective);
+  const { scriptOptions = {}, tool = null, ...sharedEffective } = effective;
+  const configHash = configHashFor(config, sharedEffective);
   const configuredRunId = process.env.DESIGN_DIRECTOR_QA_RUN_ID || config.qaRunId;
   const appBuildId = process.env.DESIGN_DIRECTOR_APP_BUILD_ID || config.appBuildId || null;
   return {
     startedAt,
     configHash,
+    evidenceHash: stableHash(stableStringify({ configHash, tool, scriptOptions }), 16),
+    scriptOptions,
     qaRunId: configuredRunId || `generated-${stableHash(`${configHash}:${process.pid}:${startedAt}:${Math.random()}`, 16)}`,
     qaRunIdSource: configuredRunId ? "configured" : "generated",
     appBuildId,

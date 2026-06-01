@@ -291,6 +291,7 @@ async function main() {
   const platform = report.platform;
   const coveredProfiles = new Set();
   const claimedProfiles = new Set();
+  const profileEvidence = new Map();
   const treeTexts = [];
   const notApplicableProfiles = normalizeNotApplicableProfiles(report.notApplicableProfiles);
 
@@ -320,6 +321,12 @@ async function main() {
       ? ["state", "appearance", "contentSize", "orientation", "screenshot", treeField, "result"]
       : ["state", "theme", "fontScale", "displaySize", "screenshot", treeField, "result"];
     addMissingFields(incomplete, entry, required, label);
+    if (platform === "native-ios" && entry.appearance === "both") {
+      incomplete.push(`${label}: appearance must be light or dark; capture separate entries instead of both`);
+    }
+    if (platform === "native-android" && entry.theme === "both") {
+      incomplete.push(`${label}: theme must be light or dark; capture separate entries instead of both`);
+    }
 
     if (entry.screenshot) {
       const image = await inspectImage(entry.screenshot, outDir);
@@ -345,13 +352,23 @@ async function main() {
       claimedProfiles.add(profile);
       if (!inferred.has(profile)) warnings.push(`${label}: declared profile ${profile} is not supported by state metadata and does not count toward required coverage`);
     }
-    for (const profile of inferred) coveredProfiles.add(profile);
+    for (const profile of inferred) {
+      coveredProfiles.add(profile);
+      if (!profileEvidence.has(profile)) profileEvidence.set(profile, []);
+      profileEvidence.get(profile).push({
+        label,
+        screenshot: entry.screenshot ? artifactPath(outDir, entry.screenshot) : null,
+        tree: entry[treeField] ? artifactPath(outDir, entry[treeField]) : null,
+      });
+    }
   }
 
   const requiredProfiles = requiredProfilesFor(platform, args.profile);
   if (!requiredProfiles) {
     incomplete.push("profile coverage can only be checked for native-ios or native-android");
   } else {
+    const usedProfileScreenshots = new Set();
+    const usedProfileTrees = new Set();
     for (const profile of requiredProfiles) {
       if (coveredProfiles.has(profile)) continue;
       const notApplicable = notApplicableProfiles.get(profile);
@@ -381,6 +398,22 @@ async function main() {
         }
       } else {
         incomplete.push(`required profile not covered: ${profile}`);
+      }
+    }
+    for (const profile of requiredProfiles) {
+      if (!coveredProfiles.has(profile)) continue;
+      const candidates = profileEvidence.get(profile) || [];
+      const unique = candidates.find((candidate) =>
+        candidate.screenshot &&
+        candidate.tree &&
+        !usedProfileScreenshots.has(candidate.screenshot) &&
+        !usedProfileTrees.has(candidate.tree)
+      );
+      if (!unique) {
+        incomplete.push(`required profile lacks unique screenshot/tree evidence: ${profile}`);
+      } else {
+        usedProfileScreenshots.add(unique.screenshot);
+        usedProfileTrees.add(unique.tree);
       }
     }
   }

@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000, minTextPx: 12, minTargetPx: 44 };
@@ -56,7 +56,17 @@ async function main() {
   const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(outDir, { recursive: true });
   const startedAt = new Date().toISOString();
-  const runMeta = qaRunMetadata(config, { baseUrl, states, viewports }, startedAt);
+  const runMeta = qaRunMetadata(config, {
+    baseUrl,
+    states,
+    viewports,
+    tool: "dom-audit",
+    scriptOptions: {
+      timeout: args.timeout,
+      minTextPx: args.minTextPx,
+      minTargetPx: args.minTargetPx,
+    },
+  }, startedAt);
 
   const { chromium } = await loadPlaywright();
 
@@ -79,6 +89,7 @@ async function main() {
         const targetUrl = resolveTarget(baseUrl, state);
         const stateName = stateNameFor(state);
         const stateId = stateIdFor(state, stateIndex);
+        const routeHash = stableHash(targetUrl);
         const entry = {
           state: stateName,
           stateId,
@@ -97,6 +108,8 @@ async function main() {
             screenshotDir,
             artifactPathBase: outDir,
             stateName: stateId,
+            stateIndex,
+            routeHash,
             viewport,
           });
           entry.finalUrl = page.url();

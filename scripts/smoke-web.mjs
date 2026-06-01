@@ -27,6 +27,7 @@ async function main() {
   await writeJson(configPath, {
     url: fixtureUrl,
     qaProfile: "static",
+    qaRunId: "smoke-web-static",
     viewports: [{ width: 375, height: 700 }],
     states: [{ name: "default" }]
   });

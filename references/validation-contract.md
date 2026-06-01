@@ -14,6 +14,13 @@ The brief may be omitted only for a short routing answer.
 for acceptance. `incomplete` means evidence is missing or uninspected; `fail`
 means a blocker was found.
 
+Final web acceptance also requires the render, DOM, and visual audit artifacts
+to be fresh, produced from the same effective config/base URL, and tied to the
+same configured `qaRunId`. Generated run IDs, stale artifacts, broad final-URL
+mismatch allowances, evidence-only reports, and partial reports are not final
+acceptance. Static pages may use `qaMode: "final-static"` only when the DOM
+audit proves there are no visible interactive controls.
+
 ## Default Viewports
 
 - 320
@@ -89,10 +96,11 @@ A design pass is accepted only when:
 3. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
 4. Implementation changes map back to the brief.
 5. `scripts/discover-states.mjs` was run or explicitly waived with a reason when a rendered web surface exists.
-6. Rendered screenshots exist for required viewports and key states.
-7. Screenshots were inspected, not merely generated.
-8. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
-9. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
-10. `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
-11. No blocker remains unwaived.
-12. Any waiver includes evidence and reason, and no valid waiver is stale or unused.
+6. Render, DOM, and visual audit artifacts are fresh and share a configured `qaRunId`.
+7. Rendered screenshots exist for required viewports and key states.
+8. Screenshots were inspected, not merely generated.
+9. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
+10. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
+11. `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
+12. No blocker remains unwaived.
+13. Any waiver includes evidence and reason, and no valid waiver is stale or unused.

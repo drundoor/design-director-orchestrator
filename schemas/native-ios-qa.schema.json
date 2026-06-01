@@ -51,7 +51,7 @@
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
-          "appearance": { "enum": ["light", "dark", "both"] },
+          "appearance": { "enum": ["light", "dark"] },
           "contentSize": { "type": "string", "minLength": 1 },
           "orientation": { "type": "string", "minLength": 1 },
           "keyboard": { "type": "boolean" },

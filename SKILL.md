@@ -57,7 +57,7 @@ Rendered QA must exercise the interface the way a user will use it. Static defau
 - Before acceptance, configure and inspect active states for every relevant interactive surface: search suggestions, dropdowns, comboboxes, filter pickers, popovers, dialogs, menus, details/accordions, tabs, chart controls, hover/focus states, mobile navigation, and form validation.
 - Open overlays and menus in both mobile and desktop viewports when they exist. Verify they are visible, usable, above neighboring containers/charts/tables, not clipped, and reachable by keyboard/touch as applicable.
 - Run state discovery or explicitly waive it before final QA when a rendered web surface exists. A manually named default state is not enough for interfaces with controls, overlays, charts, forms, tabs, filters, or nested scroll.
-- Final acceptance means `design-qa.json` has `status: "pass"` and `acceptanceReady: true`. Evidence-only reports are not final acceptance. `status: "incomplete"` means evidence is missing or uninspected and is not acceptable for shipping.
+- Final acceptance means `design-qa.json` has `status: "pass"` and `acceptanceReady: true`, with fresh render/DOM/visual artifacts sharing one configured `qaRunId`. Evidence-only, partial, stale, mixed-run, and generated-run-ID reports are not final acceptance. `status: "incomplete"` means evidence is missing or uninspected and is not acceptable for shipping.
 
 Load focused references only when relevant:
 

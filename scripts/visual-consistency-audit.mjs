@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = {
@@ -89,7 +89,23 @@ async function main() {
   const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(outDir, { recursive: true });
   const startedAt = new Date().toISOString();
-  const runMeta = qaRunMetadata(config, { baseUrl, states, viewports }, startedAt);
+  const runMeta = qaRunMetadata(config, {
+    baseUrl,
+    states,
+    viewports,
+    tool: "visual-consistency-audit",
+    scriptOptions: {
+      timeout: args.timeout,
+      maxFindings: args.maxFindings,
+      fontDeltaPx: args.fontDeltaPx,
+      alignDeltaPx: args.alignDeltaPx,
+      widthDeltaPx: args.widthDeltaPx,
+      gapRatio: args.gapRatio,
+      maxElements: args.maxElements,
+      maxContainers: args.maxContainers,
+      viewportsOverride: args.viewports || null,
+    },
+  }, startedAt);
 
   const { chromium } = await loadPlaywright();
   const browser = await launchBrowser(chromium);
@@ -119,6 +135,7 @@ async function main() {
         const targetUrl = resolveTarget(baseUrl, state);
         const stateName = stateNameFor(state);
         const stateId = stateIdFor(state, stateIndex);
+        const routeHash = stableHash(targetUrl);
         const entry = {
           state: stateName,
           stateId,
@@ -137,6 +154,8 @@ async function main() {
             screenshotDir,
             artifactPathBase: outDir,
             stateName: stateId,
+            stateIndex,
+            routeHash,
             viewport,
           });
           entry.finalUrl = page.url();

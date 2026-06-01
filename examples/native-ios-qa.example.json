@@ -28,14 +28,34 @@
       "result": "pass"
     },
     {
-      "state": "form-focused",
-      "profiles": ["dark", "large-text", "keyboard-focused"],
+      "state": "home-dark",
+      "profile": "dark",
       "appearance": "dark",
+      "contentSize": "default",
+      "orientation": "portrait",
+      "screenshot": ".design-director/ios-home-dark.png",
+      "uiHierarchy": ".design-director/ios-home-dark-hierarchy.json",
+      "result": "pass"
+    },
+    {
+      "state": "home-large-text",
+      "profile": "large-text",
+      "appearance": "light",
       "contentSize": "accessibilityLarge",
       "orientation": "portrait",
+      "screenshot": ".design-director/ios-home-large-text.png",
+      "uiHierarchy": ".design-director/ios-home-large-text-hierarchy.json",
+      "result": "pass"
+    },
+    {
+      "state": "form-focused",
+      "profile": "keyboard-focused",
+      "appearance": "light",
+      "contentSize": "default",
+      "orientation": "portrait",
       "keyboard": true,
-      "screenshot": ".design-director/ios-form-dark-large.png",
-      "uiHierarchy": ".design-director/ios-form-dark-large-hierarchy.json",
+      "screenshot": ".design-director/ios-form-keyboard.png",
+      "uiHierarchy": ".design-director/ios-form-keyboard-hierarchy.json",
       "result": "pass"
     }
   ],

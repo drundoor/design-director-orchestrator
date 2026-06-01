@@ -72,7 +72,16 @@ async function main() {
   const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(screenshotDir, { recursive: true });
   const startedAt = new Date().toISOString();
-  const runMeta = qaRunMetadata(config, { baseUrl, states, viewports }, startedAt);
+  const runMeta = qaRunMetadata(config, {
+    baseUrl,
+    states,
+    viewports,
+    tool: "render-check",
+    scriptOptions: {
+      timeout: args.timeout,
+      viewportsOverride: args.viewports || null,
+    },
+  }, startedAt);
 
   const { chromium } = await loadPlaywright();
 
@@ -148,6 +157,8 @@ async function main() {
             screenshotDir,
             artifactPathBase: outDir,
             stateName: stateId,
+            stateIndex,
+            routeHash,
             viewport,
           });
           await page.screenshot({ path: screenshotPath, fullPage: Boolean(config.fullPage ?? true) });

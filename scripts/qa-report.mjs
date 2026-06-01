@@ -122,6 +122,11 @@ function pathInsideDir(dir, file) {
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
+function evidencePathInside(outDir, file) {
+  const absolute = resolveEvidencePath(outDir, file);
+  return Boolean(absolute && pathInsideDir(outDir, absolute));
+}
+
 function artifactPath(outDir, file) {
   if (!file) return file;
   const absolute = resolveEvidencePath(outDir, file);
@@ -284,6 +289,7 @@ async function validateWaivers(waivers, { outDir, partial }) {
       problems.push("expires is in the past");
     }
     if (waiver.evidence) {
+      if (!evidencePathInside(outDir, waiver.evidence)) problems.push(`evidence path must be inside ${path.basename(outDir)}: ${waiver.evidence}`);
       const evidencePath = resolveEvidencePath(outDir, waiver.evidence);
       if (!(await pathExists(evidencePath))) problems.push(`evidence path does not exist: ${waiver.evidence}`);
     }
@@ -375,6 +381,19 @@ function loadScreenshots(render, outDir) {
   return screenshots;
 }
 
+function duplicateScreenshotPaths(render, outDir) {
+  const paths = [];
+  for (const state of render?.states || []) {
+    if (state.screenshot) paths.push(artifactPath(outDir, state.screenshot));
+    for (const artifact of state.actionArtifacts || []) {
+      if (artifact.type === "element-screenshot" && artifact.path) paths.push(artifactPath(outDir, artifact.path));
+    }
+  }
+  const counts = new Map();
+  for (const file of paths.filter(Boolean)) counts.set(file, (counts.get(file) || 0) + 1);
+  return [...counts.entries()].filter(([, count]) => count > 1).map(([file, count]) => ({ file, count }));
+}
+
 function screenshotNoteTemplate(render, outDir) {
   const screenshots = loadScreenshots(render, outDir);
   const rows = screenshots.length
@@ -446,15 +465,16 @@ function noteMetadataProblems(screenshot, fields) {
   const expectedViewport = screenshot.viewport ? `${screenshot.viewport.width}x${screenshot.viewport.height}` : "unknown";
   const expectedState = screenshot.state || "unknown";
   const expectedUrl = normalizeUrl(screenshot.url);
-  const aliasAllowed = /^(yes|true)$/i.test(fields.get("state alias") || fields.get("alias") || "");
-  const redirectAllowed = /^(yes|true)$/i.test(fields.get("redirect") || fields.get("url redirect") || "");
+  if (fields.get("state alias") || fields.get("alias") || fields.get("redirect") || fields.get("url redirect")) {
+    problems.push(`${screenshot.path}: screenshot-note alias/redirect shortcuts are not acceptance evidence; update the captured state or use a scoped finalUrlException with evidence`);
+  }
   if (viewport && viewport !== expectedViewport) {
     problems.push(`${screenshot.path}: note viewport ${viewport} does not match screenshot viewport ${expectedViewport}`);
   }
-  if (state && state !== expectedState && !aliasAllowed) {
+  if (state && state !== expectedState) {
     problems.push(`${screenshot.path}: note state ${state} does not match rendered state ${expectedState}`);
   }
-  if (url && normalizeUrl(url) !== expectedUrl && !redirectAllowed) {
+  if (url && normalizeUrl(url) !== expectedUrl) {
     problems.push(`${screenshot.path}: note URL ${url} does not match screenshot URL ${screenshot.url}`);
   }
   return problems;
@@ -609,8 +629,12 @@ async function dispositionProblems(candidate, disposition, { outDir, rendered })
   if (value === "rendered" && !rendered && !evidence) {
     problems.push(`state-coverage rendered disposition for ${candidate.kind} ${candidate.selector} requires evidence when no rendered state/action proves it`);
   }
-  if (evidence && !(await pathExists(resolveEvidencePath(outDir, evidence)))) {
-    problems.push(`state-coverage evidence does not exist for ${candidate.kind} ${candidate.selector}: ${evidence}`);
+  if (evidence) {
+    if (!evidencePathInside(outDir, evidence)) {
+      problems.push(`state-coverage evidence must be inside ${path.basename(outDir)} for ${candidate.kind} ${candidate.selector}: ${evidence}`);
+    } else if (!(await pathExists(resolveEvidencePath(outDir, evidence)))) {
+      problems.push(`state-coverage evidence does not exist for ${candidate.kind} ${candidate.selector}: ${evidence}`);
+    }
   }
   return problems;
 }
@@ -731,10 +755,13 @@ function artifactFreshness(artifacts, maxAgeMs) {
     .filter((value) => Number.isFinite(value));
   const earliest = times.length ? Math.min(...times) : null;
   const latest = times.length ? Math.max(...times) : null;
+  const latestAgeMs = latest ? Math.max(0, Date.now() - latest) : null;
   return {
     artifacts: present.map((artifact) => ({
       name: artifact.name,
       configHash: artifact.result.data?.configHash || null,
+      evidenceHash: artifact.result.data?.evidenceHash || null,
+      scriptOptions: artifact.result.data?.scriptOptions || null,
       qaRunId: artifact.result.data?.qaRunId || null,
       qaRunIdSource: artifact.result.data?.qaRunIdSource || null,
       appBuildId: artifact.result.data?.appBuildId || null,
@@ -751,12 +778,30 @@ function artifactFreshness(artifacts, maxAgeMs) {
     earliest: earliest ? new Date(earliest).toISOString() : null,
     latest: latest ? new Date(latest).toISOString() : null,
     spanMs: earliest && latest ? latest - earliest : null,
+    latestAgeMs,
     maxAgeMs,
   };
 }
 
 function stateFinalUrl(state = {}) {
   return normalizeUrl(state.finalUrl || state.url);
+}
+
+async function finalUrlException(state = {}, other = {}, outDir) {
+  const exception = state.finalUrlException || state.allowedFinalUrlMismatch || other.finalUrlException || other.allowedFinalUrlMismatch || null;
+  if (!exception || typeof exception !== "object") return { allowed: false, reason: "no scoped exception" };
+  const expected = exception.expectedFinalUrl || exception.allowedRedirectTo;
+  const reason = String(exception.reason || "").trim();
+  const evidence = exception.evidence;
+  if (!expected) return { allowed: false, reason: "missing expectedFinalUrl or allowedRedirectTo" };
+  if (!reason) return { allowed: false, reason: "missing reason" };
+  if (!evidence) return { allowed: false, reason: "missing evidence" };
+  if (!evidencePathInside(outDir, evidence)) return { allowed: false, reason: `evidence must be inside ${path.basename(outDir)}` };
+  if (!(await pathExists(resolveEvidencePath(outDir, evidence)))) return { allowed: false, reason: "evidence file missing" };
+  const normalizedExpected = normalizeUrl(expected);
+  const actualUrls = new Set([stateFinalUrl(state), stateFinalUrl(other)]);
+  if (!actualUrls.has(normalizedExpected)) return { allowed: false, reason: `expected URL ${expected} does not match either artifact URL` };
+  return { allowed: true, reason, evidence: artifactPath(outDir, evidence), expectedFinalUrl: normalizedExpected };
 }
 
 function sanitizeStringForOutput(value, outDir) {
@@ -810,6 +855,7 @@ async function main() {
   const render = renderArtifact.data || { states: [], screenshots: [] };
   const dom = domArtifact.data || { states: [] };
   const visual = visualArtifact.data || { states: [] };
+  const globalFinalUrlMismatch = Boolean(render.allowFinalUrlMismatch || dom.allowFinalUrlMismatch || visual.allowFinalUrlMismatch);
   const notesPath = args.notes || path.join(outDir, "screenshot-notes.md");
   const briefPath = args.brief || path.join(outDir, "design-brief.md");
 
@@ -864,6 +910,9 @@ async function main() {
   if (args.allowMixedEvidence) {
     warnings.push("--allow-mixed-evidence was supplied; this report cannot be final design acceptance");
   }
+  if (globalFinalUrlMismatch) {
+    warnings.push("global allowFinalUrlMismatch was present in audit artifacts; use scoped finalUrlException evidence for final acceptance");
+  }
 
   for (const artifact of [
     ["render-results", renderArtifact],
@@ -881,6 +930,8 @@ async function main() {
   ], maxEvidenceAgeMs);
   for (const artifact of freshness.artifacts) {
     if (!artifact.configHash) addIncomplete(`${artifact.name}.json is missing configHash; rerun current audit scripts`, "evidence-freshness");
+    if (!artifact.evidenceHash) addIncomplete(`${artifact.name}.json is missing evidenceHash; rerun current audit scripts`, "evidence-freshness");
+    if (!artifact.qaRunId) addIncomplete(`${artifact.name}.json is missing qaRunId; rerun current audit scripts`, "evidence-freshness");
     if (!artifact.startedAt || !artifact.finishedAt) addIncomplete(`${artifact.name}.json is missing startedAt/finishedAt; rerun current audit scripts`, "evidence-freshness");
   }
   const mixedEvidenceAllowed = Boolean(args.partial || args.allowMixedEvidence);
@@ -896,8 +947,11 @@ async function main() {
   }
   if (freshness.configuredRunIds.length > 1) {
     addIncomplete(`configured qaRunId differs across web audit artifacts: ${freshness.configuredRunIds.join(", ")}`, "evidence-freshness");
-  } else if (freshness.generatedRunIds.length > 1) {
-    warnings.push("web audit artifacts used generated qaRunId values; configHash, baseUrl, and timestamps are enforcing freshness");
+  }
+  if (freshness.generatedRunIds.length) {
+    const message = "web audit artifacts used generated qaRunId values; set config.qaRunId or DESIGN_DIRECTOR_QA_RUN_ID for final same-run acceptance";
+    if (mixedEvidenceAllowed) warnings.push(message);
+    else addIncomplete(message, "evidence-freshness");
   }
   if (freshness.appBuildIds.length > 1) {
     const message = `web audit artifacts use different appBuildId values: ${freshness.appBuildIds.join(", ")}`;
@@ -906,6 +960,11 @@ async function main() {
   }
   if (freshness.spanMs !== null && freshness.spanMs > maxEvidenceAgeMs) {
     const message = `web audit artifacts were generated ${freshness.spanMs}ms apart, exceeding max evidence age ${maxEvidenceAgeMs}ms`;
+    if (mixedEvidenceAllowed) warnings.push(message);
+    else addIncomplete(message, "evidence-freshness");
+  }
+  if (freshness.latestAgeMs !== null && freshness.latestAgeMs > maxEvidenceAgeMs) {
+    const message = `web audit artifacts are ${freshness.latestAgeMs}ms old, exceeding max evidence age ${maxEvidenceAgeMs}ms`;
     if (mixedEvidenceAllowed) warnings.push(message);
     else addIncomplete(message, "evidence-freshness");
   }
@@ -946,8 +1005,10 @@ async function main() {
       const otherUrl = stateFinalUrl(other);
       if (renderUrl !== otherUrl) {
         const message = `${formatStateLabel(state)}: final URL mismatch for ${key}; render=${renderUrl}, ${label}=${otherUrl}`;
-        if (args.partial || render.allowFinalUrlMismatch || dom.allowFinalUrlMismatch || visual.allowFinalUrlMismatch) warnings.push(message);
-        else addIncomplete(message, "final-url", state);
+        const exception = await finalUrlException(state, other, outDir);
+        if (exception.allowed) warnings.push(`${message}; allowed by scoped final URL exception (${exception.reason})`);
+        else if (args.partial) warnings.push(message);
+        else addIncomplete(`${message}; ${exception.reason}`, "final-url", state);
       }
     }
   }
@@ -1041,6 +1102,9 @@ async function main() {
   }
 
   const screenshots = loadScreenshots(render, outDir);
+  for (const duplicate of duplicateScreenshotPaths(render, outDir)) {
+    addIncomplete(`duplicate screenshot artifact path ${duplicate.file} is referenced ${duplicate.count} times; screenshot evidence must be collision-free`, "screenshots:duplicates");
+  }
   if (!screenshots.length) {
     addIncomplete("no screenshots were produced by render-check.mjs", "screenshots");
   }
@@ -1092,7 +1156,7 @@ async function main() {
   };
 
   const status = blockers.length ? "fail" : incomplete.length ? "incomplete" : "pass";
-  const qaMode = args.partial ? "partial" : args.static ? "static" : (args.evidenceOnly || args.noBrief || args.allowMixedEvidence) ? "evidence-only" : "final";
+  const qaMode = args.partial ? "partial" : (args.evidenceOnly || args.noBrief || args.allowMixedEvidence || globalFinalUrlMismatch) ? "evidence-only" : args.static ? "final-static" : "final";
   const qa = {
     generatedAt: new Date().toISOString(),
     qaMode,
@@ -1110,7 +1174,7 @@ async function main() {
     waiverValidation,
     appliedWaivers,
     evidenceCompleteness,
-    acceptanceReady: status === "pass" && qaMode === "final",
+    acceptanceReady: status === "pass" && (qaMode === "final" || qaMode === "final-static"),
   };
 
   const md = `# Design QA

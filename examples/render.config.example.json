@@ -4,6 +4,7 @@
   "platform": "web",
   "surface": "product-ui",
   "qaProfile": "final-qa",
+  "qaRunId": "set-per-qa-run",
   "waitForSelector": "main",
   "states": [
     {

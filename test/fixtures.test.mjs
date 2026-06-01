@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { qaRunMetadata } from "../scripts/lib/browser-utils.mjs";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -44,20 +45,26 @@ function webpVp8Bytes(width = 375, height = 700) {
 }
 
 const pagePng = pngBytes(375, 700);
-const webMetaTimestamp = "2026-01-01T00:00:00.000Z";
-
 function webMeta(tool, overrides = {}) {
+  const now = Date.now();
+  const startedAt = overrides.startedAt || new Date(now).toISOString();
+  const finishedAt = overrides.finishedAt || new Date(now + 1000).toISOString();
   return {
     tool,
-    generatedAt: webMetaTimestamp,
-    startedAt: webMetaTimestamp,
-    finishedAt: "2026-01-01T00:00:01.000Z",
+    generatedAt: startedAt,
+    startedAt,
+    finishedAt,
     configHash: "test-config-hash",
+    evidenceHash: `${tool}-evidence-hash`,
+    scriptOptions: {},
     qaRunId: "test-run",
     qaRunIdSource: "configured",
     appBuildId: "test-build",
     baseUrl: "http://example.invalid",
     ...overrides,
+    generatedAt: overrides.generatedAt || startedAt,
+    startedAt,
+    finishedAt,
   };
 }
 
@@ -73,6 +80,17 @@ async function runScript(args, options = {}) {
 async function writeJson(file, value) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, JSON.stringify(value, null, 2));
+}
+
+async function writeNativeProfileArtifacts(out, names, options = {}) {
+  const imageBytes = options.imageBytes || pagePng;
+  const treeText = options.treeText || JSON.stringify({ windows: [] });
+  const treeExt = options.treeExt || "json";
+  const imageExt = options.imageExt || "png";
+  for (const name of names) {
+    await fs.writeFile(path.join(out, `${name}.${imageExt}`), imageBytes);
+    await fs.writeFile(path.join(out, `${name}-hierarchy.${treeExt}`), treeText);
+  }
 }
 
 async function writeInspectedNotes(file, screenshots) {
@@ -392,6 +410,8 @@ test("qa-report --static allows missing state discovery when other evidence is c
   await runScript(["scripts/qa-report.mjs", "--out", out, "--static"]);
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.equal(qa.status, "pass");
+  assert.equal(qa.qaMode, "final-static");
+  assert.equal(qa.acceptanceReady, true);
   assert.equal(qa.evidenceCompleteness.artifacts.stateDiscovery.waived, true);
 });
 
@@ -587,6 +607,56 @@ test("qa-report rejects stale evidence generated outside the freshness window", 
   assert.ok(qa.incomplete.some((issue) => issue.includes("exceeding max evidence age")));
 });
 
+test("qa-report rejects old but internally consistent evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-old-consistent-evidence-"));
+  const oldRender = webMeta("render-check", {
+    startedAt: "2026-01-01T00:00:00.000Z",
+    finishedAt: "2026-01-01T00:00:01.000Z"
+  });
+  const oldDom = webMeta("dom-audit", {
+    startedAt: "2026-01-01T00:00:02.000Z",
+    finishedAt: "2026-01-01T00:00:03.000Z"
+  });
+  const oldVisual = webMeta("visual-consistency-audit", {
+    startedAt: "2026-01-01T00:00:04.000Z",
+    finishedAt: "2026-01-01T00:00:05.000Z"
+  });
+  await createQaArtifacts(out, {
+    render: oldRender,
+    dom: {
+      ...oldDom,
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }]
+    },
+    visual: {
+      ...oldVisual,
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }]
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("web audit artifacts are") && issue.includes("exceeding max evidence age")));
+});
+
+test("qa-report requires configured same-run qaRunId for final acceptance", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-generated-run-id-"));
+  const generated = { qaRunId: "generated-shared", qaRunIdSource: "generated" };
+  await createQaArtifacts(out, {
+    render: generated,
+    dom: {
+      ...generated,
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }]
+    },
+    visual: {
+      ...generated,
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }]
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("used generated qaRunId values")));
+  assert.equal(qa.acceptanceReady, false);
+});
+
 test("qa-report rejects final URL drift across web artifacts", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-final-url-"));
   await createQaArtifacts(out, {
@@ -598,6 +668,40 @@ test("qa-report rejects final URL drift across web artifacts", async () => {
   await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.ok(qa.incomplete.some((issue) => issue.includes("final URL mismatch")));
+});
+
+test("qa-report allows final URL drift only with scoped evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-final-url-scoped-"));
+  await createQaArtifacts(out, {
+    state: {
+      finalUrlException: {
+        expectedFinalUrl: "http://example.invalid/details",
+        reason: "Details action intentionally redirects after render capture.",
+        evidence: "screenshots/default-375x700.png"
+      }
+    },
+    dom: {
+      ...webMeta("dom-audit"),
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid/details", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }]
+    }
+  });
+  await runScript(["scripts/qa-report.mjs", "--out", out]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.acceptanceReady, true);
+  assert.ok(qa.warnings.some((warning) => warning.includes("scoped final URL exception")));
+});
+
+test("qa-report treats global final URL mismatch allowances as non-final", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-global-final-url-"));
+  await createQaArtifacts(out, {
+    render: { allowFinalUrlMismatch: true }
+  });
+  await runScript(["scripts/qa-report.mjs", "--out", out]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.qaMode, "evidence-only");
+  assert.equal(qa.acceptanceReady, false);
 });
 
 test("qa-report cross-checks screenshot note viewport, state, and URL", async () => {
@@ -750,6 +854,57 @@ test("qa-report rejects invalid broad or unevidenced waivers", async () => {
   assert.ok(qa.incomplete.some((issue) => issue.includes("evidence is required")));
 });
 
+test("qa-report rejects waiver evidence outside the QA output directory", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-waiver-outside-"));
+  const outside = path.join(os.tmpdir(), "dd-waiver-outside-evidence.png");
+  await fs.writeFile(outside, pagePng);
+  await createQaArtifacts(out);
+  await writeJson(path.join(out, "waivers.json"), [{
+    check: "console-error",
+    reason: "Outside evidence must not be accepted for final public QA.",
+    evidence: outside,
+    owner: "qa",
+    expires: "2999-01-01"
+  }]);
+
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("evidence path must be inside")));
+});
+
+test("qa-report rejects state coverage evidence outside the QA output directory", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-state-outside-evidence-"));
+  const outside = path.join(os.tmpdir(), "dd-state-outside-evidence.png");
+  await fs.writeFile(outside, pagePng);
+  await createQaArtifacts(out, {
+    discovery: {
+      candidates: [{
+        kind: "chart-or-canvas",
+        selector: "#chart",
+        confidence: "medium",
+        mutationRisk: "safe",
+        discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: { width: 375, height: 700 } }
+      }],
+      scans: [{ ok: true }]
+    },
+    render: { qaProfile: "final-qa", surface: "dashboard" }
+  });
+  await writeJson(path.join(out, "state-coverage.json"), {
+    dispositions: [{
+      kind: "chart-or-canvas",
+      selector: "#chart",
+      disposition: "low-value",
+      reason: "Outside evidence should not satisfy coverage.",
+      evidence: outside,
+      discoveredFrom: { state: "default", url: "http://example.invalid/", viewport: "375x700" }
+    }]
+  });
+
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("state-coverage evidence must be inside")));
+});
+
 test("qa-report rejects fake screenshot files", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-fake-shot-"));
   await createQaArtifacts(out, { screenshotBytes: Buffer.from("png-placeholder") });
@@ -819,10 +974,59 @@ test("qa-report screenshot note template includes element screenshots", async ()
   assert.match(notes, new RegExp(elementPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("render-check keeps same-named element screenshots collision-free", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-render-element-collision-"));
+  const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/fixed.html")).toString();
+  const configPath = path.join(out, "render.config.json");
+  await writeJson(configPath, {
+    url: fixtureUrl,
+    qaRunId: "element-collision-test",
+    viewports: [{ width: 375, height: 700 }],
+    states: [
+      { name: "default", actions: [{ type: "screenshotElement", selector: "svg", name: "chart" }] },
+      { name: "default", path: "?variant=two", actions: [{ type: "screenshotElement", selector: "svg", name: "chart" }] }
+    ]
+  });
+  await runScript(["scripts/render-check.mjs", "--config", configPath, "--out", out]);
+  const render = JSON.parse(await fs.readFile(path.join(out, "render-results.json"), "utf8"));
+  const elementPaths = render.states.map((state) => state.actionArtifacts[0].path);
+  assert.equal(new Set(elementPaths).size, 2);
+  for (const elementPath of elementPaths) {
+    await fs.access(path.join(out, elementPath));
+  }
+});
+
+test("qa-report rejects duplicate screenshot artifact paths", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-duplicate-screenshot-"));
+  await createQaArtifacts(out, {
+    state: {
+      actionArtifacts: [
+        { type: "element-screenshot", path: "screenshots/default-375x700.png", selector: "#chart" }
+      ]
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("duplicate screenshot artifact path")));
+});
+
+test("script options affect evidenceHash without changing shared configHash", () => {
+  const config = { url: "http://example.invalid", qaRunId: "evidence-hash-test" };
+  const effective = {
+    baseUrl: "http://example.invalid",
+    states: [{ name: "default" }],
+    viewports: [{ width: 375, height: 700 }],
+    tool: "visual-consistency-audit",
+  };
+  const lowThreshold = qaRunMetadata(config, { ...effective, scriptOptions: { fontDeltaPx: 2 } }, "2026-01-01T00:00:00.000Z");
+  const highThreshold = qaRunMetadata(config, { ...effective, scriptOptions: { fontDeltaPx: 8 } }, "2026-01-01T00:00:00.000Z");
+  assert.equal(lowThreshold.configHash, highThreshold.configHash);
+  assert.notEqual(lowThreshold.evidenceHash, highThreshold.evidenceHash);
+});
+
 test("native-qa-report passes complete iOS evidence", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-ios-"));
-  await fs.writeFile(path.join(out, "home.png"), pagePng);
-  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large", "home-keyboard"]);
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
   await writeJson(path.join(out, "native-ios-qa.json"), {
     platform: "native-ios",
@@ -841,8 +1045,8 @@ test("native-qa-report passes complete iOS evidence", async () => {
         appearance: "light",
         contentSize: "default",
         orientation: "portrait",
-        screenshot: "home.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-light.png",
+        uiHierarchy: "home-light-hierarchy.json",
         result: "pass"
       },
       {
@@ -850,8 +1054,8 @@ test("native-qa-report passes complete iOS evidence", async () => {
         appearance: "dark",
         contentSize: "default",
         orientation: "portrait",
-        screenshot: "home.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-dark.png",
+        uiHierarchy: "home-dark-hierarchy.json",
         result: "pass"
       },
       {
@@ -859,8 +1063,8 @@ test("native-qa-report passes complete iOS evidence", async () => {
         appearance: "light",
         contentSize: "accessibilityLarge",
         orientation: "portrait",
-        screenshot: "home.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-large.png",
+        uiHierarchy: "home-large-hierarchy.json",
         result: "pass"
       },
       {
@@ -869,8 +1073,8 @@ test("native-qa-report passes complete iOS evidence", async () => {
         contentSize: "default",
         orientation: "portrait",
         keyboard: true,
-        screenshot: "home.png",
-        uiHierarchy: "hierarchy.json",
+        screenshot: "home-keyboard.png",
+        uiHierarchy: "home-keyboard-hierarchy.json",
         result: "pass"
       }
     ],
@@ -919,6 +1123,72 @@ test("native-qa-report does not count self-declared profiles without supporting 
   assert.equal(qa.status, "incomplete");
   assert.ok(qa.incomplete.some((issue) => issue.includes("required profile not covered: dark")));
   assert.ok(qa.warnings.some((warning) => warning.includes("declared profile dark is not supported")));
+});
+
+test("native-qa-report rejects combined iOS appearance evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-ios-both-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    matrix: [
+      { state: "home", appearance: "both", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("appearance must be light or dark")));
+});
+
+test("native-qa-report rejects combined Android theme evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-android-both-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "tree.xml"), "<hierarchy />");
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-android-qa.json"), {
+    platform: "native-android",
+    target: { module: ":app", variant: "debug", device: "Pixel 8", apiLevel: 35 },
+    tooling: { commandsOrToolCalls: ["adb exec-out screencap -p"] },
+    matrix: [
+      { state: "home", theme: "both", fontScale: 1, displaySize: "default", screenshot: "home.png", uiTree: "tree.xml", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-android-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("theme must be light or dark")));
+});
+
+test("native-qa-report requires unique screenshot and tree evidence per required profile", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-unique-profile-evidence-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    matrix: [
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-keyboard", appearance: "light", contentSize: "default", orientation: "portrait", keyboard: true, screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("required profile lacks unique screenshot/tree evidence")));
 });
 
 test("native-qa-report does not infer iOS keyboard coverage from state names", async () => {
@@ -997,18 +1267,20 @@ test("native-qa-report rejects string-only not-applicable profile records", asyn
 
 test("native-qa-report sanitizes report-provided paths and accepts VP8 WebP screenshots", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-webp-redact-"));
-  await fs.writeFile(path.join(out, "home.webp"), webpVp8Bytes(375, 700));
-  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large", "home-keyboard"], {
+    imageBytes: webpVp8Bytes(375, 700),
+    imageExt: "webp",
+  });
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
   await writeJson(path.join(out, "native-ios-qa.json"), {
     platform: "native-ios",
     target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
     tooling: { commandsOrToolCalls: ["capture screenshot"] },
     matrix: [
-      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" },
-      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" },
-      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" },
-      { state: "home-keyboard", appearance: "light", contentSize: "default", orientation: "portrait", keyboard: true, screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" }
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home-light.webp", uiHierarchy: "home-light-hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home-dark.webp", uiHierarchy: "home-dark-hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home-large.webp", uiHierarchy: "home-large-hierarchy.json", result: "pass" },
+      { state: "home-keyboard", appearance: "light", contentSize: "default", orientation: "portrait", keyboard: true, screenshot: "home-keyboard.webp", uiHierarchy: "home-keyboard-hierarchy.json", result: "pass" }
     ],
     checks: { logsReviewed: "checked" },
     logs: "runtime.log",
@@ -1026,22 +1298,24 @@ test("native-qa-report sanitizes report-provided paths and accepts VP8 WebP scre
 
 test("native-qa-report accepts not-applicable keyboard profile only with hierarchy evidence", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-not-applicable-"));
-  await fs.writeFile(path.join(out, "home.png"), pagePng);
-  await fs.writeFile(path.join(out, "hierarchy.json"), "<hierarchy><window label=\"Read only\" /></hierarchy>");
+  await writeNativeProfileArtifacts(out, ["home-light", "home-dark", "home-large"], {
+    treeText: "<hierarchy><window label=\"Read only\" /></hierarchy>",
+  });
+  await fs.writeFile(path.join(out, "keyboard-not-applicable-hierarchy.json"), "<hierarchy><window label=\"Read only\" /></hierarchy>");
   await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
   await writeJson(path.join(out, "native-ios-qa.json"), {
     platform: "native-ios",
     target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
     tooling: { commandsOrToolCalls: ["capture screenshot"] },
     matrix: [
-      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
-      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
-      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" }
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home-light.png", uiHierarchy: "home-light-hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home-dark.png", uiHierarchy: "home-dark-hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home-large.png", uiHierarchy: "home-large-hierarchy.json", result: "pass" }
     ],
     notApplicableProfiles: {
       "keyboard-focused": {
         "reason": "Read-only screen has no editable field in the hierarchy.",
-        "evidence": "hierarchy.json"
+        "evidence": "keyboard-not-applicable-hierarchy.json"
       }
     },
     checks: { logsReviewed: "checked" },

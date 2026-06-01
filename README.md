@@ -147,6 +147,8 @@ The intent is separate from the platform. Use `repair + native-ios` or `qa + nat
 6. Generate the QA report.
 7. Do not accept the design pass while unwaived blockers remain.
 
+Set a fresh shared `qaRunId` in `.design-director/render.config.json` or `DESIGN_DIRECTOR_QA_RUN_ID` before running the three web audit scripts. Final QA rejects generated run IDs, stale artifacts, mixed config hashes, mixed base URLs, or script artifacts missing `evidenceHash`/timestamp metadata.
+
 Example:
 
 ```sh
@@ -177,13 +179,14 @@ Final web acceptance means `.design-director/design-qa.json` has `status: "pass"
 Final acceptance checklist:
 
 - `design-brief.md` exists.
+- Render, DOM, and visual audit artifacts are fresh and share the same configured `qaRunId`.
 - `design-qa.json` status is `pass`.
 - `acceptanceReady` is `true`.
 - Screenshot notes were inspected.
 - State discovery and coverage are resolved.
 - No unwaived blockers or incomplete evidence remain.
 
-For non-interactive static pages only, add `--static` to waive state discovery. Static mode still fails if the DOM audit finds visible interactive controls. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence and exit nonzero unless `--allow-partial-exit-zero` is explicitly supplied.
+For non-interactive static pages only, add `--static` to waive state discovery. Static mode can be final acceptance (`qaMode: "final-static"`) only when every other artifact passes and the DOM audit finds no visible interactive controls. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence and exit nonzero unless `--allow-partial-exit-zero` is explicitly supplied.
 
 Minimum successful web QA artifact tree:
 
@@ -208,7 +211,7 @@ node ~/.codex/skills/design-director/scripts/native-qa-report.mjs \
   --out .design-director
 ```
 
-Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Profile labels in a report are descriptive only; coverage is inferred from fields such as `appearance`, `contentSize`, `keyboard`, `focusedEditable`, `theme`, `fontScale`, and `ime`. Use `notApplicableProfiles` with reason plus hierarchy/tree evidence only when a required profile truly does not apply, such as a read-only screen with no editable field. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
+Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Profile labels in a report are descriptive only; coverage is inferred from fields such as `appearance`, `contentSize`, `keyboard`, `focusedEditable`, `theme`, `fontScale`, and `ime`. Each required profile needs its own screenshot and UI hierarchy/tree evidence unless the profile is explicitly marked not applicable. Use `notApplicableProfiles` with reason plus hierarchy/tree evidence only when a required profile truly does not apply, such as a read-only screen with no editable field. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
 
 Minimum successful native QA artifact tree:
 
