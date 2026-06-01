@@ -30,8 +30,9 @@ GitHub design skills/components.
 
 1. Prefer official docs, GitHub repositories, npm/package metadata, and license
    files over blog summaries.
-2. Record the package name, source URL, license, maintenance signal, and allowed
-   use before recommending dependency, code reference, or component adoption.
+2. Record the package name, source URL, license, license source, checked date,
+   package version or commit, maintenance signal, and allowed use before
+   recommending dependency, code reference, or component adoption.
 3. If the license is missing, unclear, copyleft for the target use, or asset-only,
    mark it `link only` or `do not use`.
 4. Keep design direction separate from component mechanics. A dependency can be
@@ -55,7 +56,12 @@ Every researched source gets one ledger row:
 - source: "official URL or GitHub repository"
   type: "design system | component library | inspiration site | GitHub skill | asset/template"
   reputation_signal: "why designers/builders should trust it"
+  checked_at: "YYYY-MM-DD"
   license: "MIT | Apache-2.0 | OFL | custom | not found"
+  license_source: "repo LICENSE | package metadata | official docs | not found"
+  package_version_or_commit: "version, release tag, commit SHA, or n/a"
+  maintenance_signal: "recent release, active issues, production use, docs freshness, or unknown"
+  maintenance_signal_checked_at: "YYYY-MM-DD"
   allowed_use: "link only | dependency | code reference | asset allowed | do not use"
   why_relevant: "brief question it answers"
   extract: "transferable principle or mechanic"
@@ -63,6 +69,10 @@ Every researched source gets one ledger row:
   local_mapping: "how it maps to this product"
   verification_gate: "how QA will prove the adaptation works"
 ```
+
+Use primary sources for license checks: repository `LICENSE` files, package
+metadata, or official documentation. Re-check sources before an implementation
+lock if `checked_at` or `maintenance_signal_checked_at` is stale for the task.
 
 Allowed-use defaults:
 

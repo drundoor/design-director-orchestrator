@@ -1,6 +1,6 @@
 # Provenance
 
-This repository was prepared from a local Codex skill bundle and sanitized for public reuse.
+This repository was prepared from a Codex skill bundle and sanitized for public reuse.
 
 No local paths, private screenshots, personal project artifacts, or generated QA
 outputs are intentionally bundled.

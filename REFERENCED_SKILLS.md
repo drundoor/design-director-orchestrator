@@ -21,13 +21,13 @@ Design Director routes work to other skills by name, but those skills are option
   - Upstream checked: `https://github.com/anthropics/skills/tree/main/skills/frontend-design`
   - Review metadata observed during packaging review: `license: Apache 2.0. Based on Anthropic's frontend-design skill. See NOTICE.md for attribution.`
   - Upstream metadata found: `LICENSE.txt` contains Apache-2.0; upstream `SKILL.md` points to that license file.
-  - Packaging status: packageable under Apache-2.0, but prefer vendoring from upstream so `LICENSE.txt` is included. The current local copy does not include the license file referenced by its frontmatter.
+  - Packaging status: packageable under Apache-2.0, but prefer vendoring from upstream so `LICENSE.txt` is included. Any reviewed copy must include the license file referenced by its frontmatter.
 - `interface-design`
   - Optional peer skill metadata reviewed: Codex skill bundle named `interface-design`
   - Upstream checked: `https://github.com/Dammyjay93/interface-design`
   - Review metadata observed during packaging review: no `LICENSE`, `NOTICE`, `README`, or frontmatter license metadata found in the reviewed bundle.
   - Upstream metadata found: GitHub reports MIT License; upstream `LICENSE` file is present.
-  - Packaging status: packageable under MIT, but vendor from upstream or add the upstream MIT license file with the local copy.
+  - Packaging status: packageable under MIT, but vendor from upstream or include the upstream MIT license file with any bundled copy.
 - `better-icons`
   - Optional peer skill metadata reviewed: Codex skill bundle named `better-icons`
   - Upstream checked: `https://github.com/better-auth/better-icons`
@@ -38,12 +38,12 @@ Design Director routes work to other skills by name, but those skills are option
   - Optional peer skill metadata reviewed: OpenAI curated plugin skill named `data-visualization`
   - Review metadata observed during packaging review: `build-web-data-visualization` version `0.1.19`, `license: MIT`.
   - Upstream checked: `https://github.com/openai/plugins`; GitHub did not report a repository-level license file during review.
-  - Packaging status: packageable from the local plugin package metadata under MIT, with the caveat that the exact plugin package metadata should be preserved because the upstream repo did not expose a repo-level license to GitHub.
+  - Packaging status: packageable from reviewed plugin package metadata under MIT, with the caveat that the exact package metadata should be preserved because the upstream repo did not expose a repo-level license to GitHub.
 - `frontend-app-builder` and `frontend-testing-debugging`
   - Optional peer skill metadata reviewed: OpenAI curated plugin skills named `frontend-app-builder` and `frontend-testing-debugging`
   - Review metadata observed during packaging review: `build-web-apps` version `0.1.0`, `license: MIT`.
   - Upstream checked: `https://github.com/openai/plugins`; GitHub did not report a repository-level license file during review.
-  - Packaging status: packageable from the local plugin package metadata under MIT, with the caveat that the exact plugin package metadata should be preserved because the upstream repo did not expose a repo-level license to GitHub.
+  - Packaging status: packageable from reviewed plugin package metadata under MIT, with the caveat that the exact package metadata should be preserved because the upstream repo did not expose a repo-level license to GitHub.
 - Other referenced routing targets, including related plugin skills:
   - Status: referenced by routing documentation only, not bundled.
 
@@ -60,6 +60,6 @@ Design Director routes work to other skills by name, but those skills are option
 - If vendoring `hallmark`, copy its `LICENSE` file into the vendored directory and retain the MIT copyright notice.
 - If vendoring `impeccable`, copy the upstream `LICENSE` file into the vendored directory, preserve existing copyright and SPDX notices, and add a short modification notice for any local changes.
 - Use the upstream release artifact for Impeccable skill packaging when possible: `https://github.com/pbakaus/impeccable/releases/tag/skill-v3.5.0`.
-- If vendoring `frontend-design`, copy from `anthropics/skills/skills/frontend-design` rather than the current local folder so the Apache `LICENSE.txt` is present.
-- If vendoring local plugin skills from OpenAI curated plugin caches, preserve the `.codex-plugin/plugin.json` file alongside the copied skill files because that is where the license metadata was found.
+- If vendoring `frontend-design`, copy from `anthropics/skills/skills/frontend-design` so the Apache `LICENSE.txt` is present.
+- If vendoring plugin skills, preserve the package metadata file alongside copied skill files when that is where license metadata was found.
 - Keep external website/reference links separate from bundled skill source. See `REFERENCE_LICENSE_POLICY.md`.

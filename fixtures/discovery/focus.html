@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Focus Discovery Fixture</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+      }
+      #focusMenu,
+      #comboList {
+        display: none;
+        border: 1px solid #555;
+        padding: 8px;
+        margin-top: 8px;
+      }
+      #focusMenuButton:focus + #focusMenu,
+      #combo[aria-expanded="true"] + #comboList {
+        display: block;
+      }
+      #tipText {
+        display: none;
+      }
+      #tipButton:focus + #tipText {
+        display: inline-block;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <button id="focusMenuButton" aria-controls="focusMenu">Focus menu</button>
+      <div id="focusMenu" role="menu">
+        <button type="button">Focusable item</button>
+      </div>
+
+      <div id="combo" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0">Choose status</div>
+      <div id="comboList" role="listbox">
+        <div role="option">Open</div>
+        <div role="option">Closed</div>
+      </div>
+
+      <button id="tipButton" aria-describedby="tipText">Help</button>
+      <span id="tipText" role="tooltip">Helpful focus tooltip</span>
+    </main>
+    <script>
+      document.querySelector("#combo").addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown") {
+          event.currentTarget.setAttribute("aria-expanded", "true");
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -659,22 +659,26 @@ async function dispositionProblems(candidate, disposition, { outDir, rendered })
   return problems;
 }
 
-const IMPORTANT_MEDIUM_KINDS = new Set(["chart-or-canvas", "scroll-container", "combobox", "text-input"]);
+const IMPORTANT_MEDIUM_KINDS = new Set(["chart-or-canvas", "scroll-container", "combobox", "keyboard-combobox", "focus-overlay", "text-input"]);
 const COVERAGE_KIND_PRIORITY = new Map([
   ["overlay-trigger", 0],
   ["select", 1],
   ["combobox", 2],
-  ["text-input", 3],
-  ["chart-or-canvas", 4],
-  ["scroll-container", 5],
-  ["tab", 6],
-  ["disclosure", 7],
-  ["safe-button", 8],
+  ["keyboard-combobox", 3],
+  ["focus-overlay", 4],
+  ["text-input", 5],
+  ["chart-or-canvas", 6],
+  ["scroll-container", 7],
+  ["tab", 8],
+  ["disclosure", 9],
+  ["safe-button", 10],
 ]);
 const COVERAGE_KIND_LIMITS = new Map([
   ["overlay-trigger", 8],
   ["select", 6],
   ["combobox", 5],
+  ["keyboard-combobox", 5],
+  ["focus-overlay", 5],
   ["text-input", 5],
   ["chart-or-canvas", 5],
   ["scroll-container", 4],
@@ -923,6 +927,55 @@ function likelyVisualIssues(warnings, limit = 5) {
   return scored.slice(0, limit).map((item) => item.warning);
 }
 
+function briefProblems(text) {
+  const problems = [];
+  if (!/(source truth|local truth|source[-\s]?of[-\s]?truth)/i.test(text)) {
+    problems.push("design-brief.md is missing source truth or local truth");
+  }
+  if (!/anti[-\s]?goals?/i.test(text)) {
+    problems.push("design-brief.md is missing anti-goals");
+  }
+  if (!/acceptance/i.test(text)) {
+    problems.push("design-brief.md is missing acceptance gates or acceptance notes");
+  }
+  return problems;
+}
+
+function nonFinalReasons({ args, status, qaMode, blockers, incomplete, warnings, globalFinalUrlMismatch }) {
+  const reasons = [];
+  if (args.partial) reasons.push("partial mode is draft evidence, not final acceptance");
+  if (status !== "pass") reasons.push(`status is ${status}`);
+  if (blockers.length) reasons.push(`${blockers.length} blocker(s) remain`);
+  if (incomplete.length) reasons.push(`${incomplete.length} incomplete evidence item(s) remain`);
+  if (qaMode === "evidence-only") reasons.push("evidence-only mode cannot be final design acceptance");
+  if (args.allowMixedEvidence) reasons.push("mixed evidence was explicitly allowed");
+  if (args.evidenceOnly || args.noBrief) reasons.push("design brief requirement was skipped");
+  if (globalFinalUrlMismatch) reasons.push("global final URL mismatch allowance was present");
+  if (!reasons.length) reasons.push("acceptanceReady is false");
+  return [...new Set(reasons)];
+}
+
+function nextActionsFor({ args, blockers, incomplete, warnings }) {
+  const actions = [];
+  if (blockers.length) actions.push("Resolve or explicitly waive blocker-class findings with scoped evidence.");
+  if (incomplete.some((item) => /screenshot notes|TODO|generated-template/i.test(item))) {
+    actions.push("Inspect every screenshot and replace generated screenshot-note TODO fields.");
+  }
+  if (incomplete.some((item) => /state discovery|state-coverage|discovered state/i.test(item))) {
+    actions.push("Rerun state discovery and render, waive, reject, or mark duplicate/low-value discovered states with evidence.");
+  }
+  if (incomplete.some((item) => /fresh|qaRunId|configHash|evidenceHash|stale|generated run/i.test(item))) {
+    actions.push("Rerun discovery/render/DOM/visual scripts with one configured qaRunId and fresh artifacts.");
+  }
+  if (incomplete.some((item) => /design-brief/i.test(item))) {
+    actions.push("Create or update .design-director/design-brief.md with source truth, anti-goals, and acceptance gates.");
+  }
+  if (warnings.length) actions.push("Review warning summary and promote warnings confirmed by screenshots or core task paths.");
+  if (args.partial) actions.push("Run final QA after notes, state coverage, and waivers are resolved.");
+  if (!actions.length) actions.push("No next action required; report is acceptance-ready.");
+  return [...new Set(actions)];
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -998,6 +1051,8 @@ async function main() {
     warnings.push("design brief requirement skipped because --evidence-only or --no-brief was supplied; this report validates QA evidence only");
   } else if (!briefArtifact.exists || !briefArtifact.text.trim()) {
     addIncomplete("design-brief.md is missing or empty; final design acceptance requires source truth, anti-goals, and acceptance notes", "design-brief");
+  } else {
+    for (const problem of briefProblems(briefArtifact.text)) addIncomplete(problem, "design-brief");
   }
   if (args.allowMixedEvidence) {
     warnings.push("--allow-mixed-evidence was supplied; this report cannot be final design acceptance");
@@ -1309,6 +1364,7 @@ async function main() {
 
   const status = blockers.length ? "fail" : incomplete.length ? "incomplete" : "pass";
   const qaMode = args.partial ? "partial" : (args.evidenceOnly || args.noBrief || args.allowMixedEvidence || globalFinalUrlMismatch) ? "evidence-only" : args.static ? "final-static" : "final";
+  const acceptanceReady = status === "pass" && (qaMode === "final" || qaMode === "final-static");
   const qa = {
     generatedAt: new Date().toISOString(),
     qaMode,
@@ -1320,6 +1376,7 @@ async function main() {
       groups: groupedWarnings(warnings),
       topLikelyIssues: likelyVisualIssues(warnings),
       promotionHint: "Promote a warning to a blocker when screenshot review, a user complaint, or a core task path confirms visible design harm.",
+      requiresHumanReview: warnings.length > 0,
     },
     screenshotCount: screenshots.length,
     screenshotNotesPath: notesArtifact.exists ? artifactPath(outDir, notesPath) : null,
@@ -1331,7 +1388,9 @@ async function main() {
     waiverValidation,
     appliedWaivers,
     evidenceCompleteness,
-    acceptanceReady: status === "pass" && (qaMode === "final" || qaMode === "final-static"),
+    acceptanceReady,
+    nonFinalBecause: acceptanceReady ? [] : nonFinalReasons({ args, status, qaMode, blockers, incomplete, warnings, globalFinalUrlMismatch }),
+    nextActions: acceptanceReady ? ["No next action required; report is acceptance-ready."] : nextActionsFor({ args, blockers, incomplete, warnings }),
   };
 
   const md = `# Design QA
@@ -1349,6 +1408,11 @@ Generated: ${qa.generatedAt}
 - Screenshot notes: ${qa.screenshotNotesPath || "missing"}
 - State discovery: ${args.static ? "waived by --static" : qa.stateDiscoveryPath || "missing"}
 - Acceptance ready: ${qa.acceptanceReady ? "yes" : "no"}
+${qa.acceptanceReady ? "" : `- Non-final because: ${qa.nonFinalBecause.join("; ")}`}
+
+## Next Actions
+
+${bullet(qa.nextActions)}
 
 ## Blockers
 

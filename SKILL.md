@@ -113,5 +113,6 @@ Use scripts only when there is a real rendered target:
 - `scripts/qa-report.mjs`: merges evidence into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
 - `scripts/run-web-qa.mjs`: one-command web QA wrapper for draft or final runs.
 - `scripts/run-native-qa.mjs`: one-command native report validator wrapper.
+- For user-facing wrapper commands, see README "Draft Vs Final QA"; use `npm run qa:web:draft`, `npm run qa:web:final`, `npm run qa:web:ci`, and `npm run qa:native:ios|android`.
 
 These scripts are evidence collectors. They do not replace judgment or specialist skills.

@@ -261,6 +261,21 @@ test("discover-states scans multiple configured routes", async () => {
   assert.ok(discovered.candidates.some((candidate) => candidate.selector === "#routeTwoFilter"));
 });
 
+test("discover-states captures focus-only and keyboard-only candidates", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-discover-focus-"));
+  const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/discovery/focus.html")).toString();
+  await runScript(["scripts/discover-states.mjs", "--url", fixtureUrl, "--out", out, "--viewports", "900x700", "--focus-steps", "10"]);
+  const discovered = JSON.parse(await fs.readFile(path.join(out, "discovered-states.json"), "utf8"));
+  const draft = JSON.parse(await fs.readFile(path.join(out, "render.config.discovered.json"), "utf8"));
+
+  assert.ok(discovered.candidates.some((candidate) => candidate.selector === "#focusMenuButton" && candidate.kind === "focus-overlay"));
+  assert.ok(discovered.candidates.some((candidate) => candidate.selector === "#combo" && candidate.kind === "keyboard-combobox"));
+  assert.ok(discovered.candidates.some((candidate) => candidate.selector === "#tipButton" && candidate.kind === "tooltip-trigger" && candidate.action?.type === "focus"));
+  assert.ok(discovered.candidateSummary.byKind["keyboard-combobox"] >= 1);
+  assert.ok(Array.isArray(discovered.skippedCandidates));
+  assert.ok(draft.states.some((state) => JSON.stringify(state).includes("ArrowDown")));
+});
+
 test("discover-states --depth 2 emits grouped drawer search state", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-discover-depth-"));
   const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/discovery/depth.html")).toString();
@@ -833,6 +848,33 @@ test("qa-report enforces design brief unless evidence-only mode is explicit", as
   assert.equal(qa.qaMode, "evidence-only");
   assert.equal(qa.acceptanceReady, false);
   assert.equal(qa.evidenceCompleteness.artifacts.designBrief.waived, true);
+});
+
+test("qa-report records non-final reasons and validates brief fields", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-nonfinal-"));
+  await createQaArtifacts(out);
+  await fs.writeFile(path.join(out, "design-brief.md"), "Acceptance: inspect the default fixture.\n");
+
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.acceptanceReady, false);
+  assert.ok(qa.incomplete.some((issue) => issue.includes("source truth")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("anti-goals")));
+  assert.ok(qa.nonFinalBecause.some((reason) => reason.includes("incomplete evidence")));
+  assert.ok(qa.nextActions.some((action) => action.includes("design-brief.md")));
+});
+
+test("run-web-qa CI mode fails when evidence is not acceptance-ready", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-web-ci-"));
+  const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/hierarchy.html")).toString();
+  await assert.rejects(
+    runScript(["scripts/run-web-qa.mjs", "--url", fixtureUrl, "--out", out, "--static", "--ci", "--viewports", "375x700"], { timeout: 120000 }),
+    /qa:web|run-web-qa/,
+  );
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.acceptanceReady, false);
+  assert.ok(Array.isArray(qa.nonFinalBecause));
+  assert.ok(Array.isArray(qa.nextActions));
 });
 
 test("qa-report persisted JSON does not leak absolute output paths", async () => {
@@ -1465,8 +1507,39 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(modes.includes("concept -> implement -> qa"));
   assert.ok(research.includes("GitHub Design Skills Or Agent Workflows"));
   assert.ok(research.includes("allowed_use"));
-  for (const scriptName of ["setup", "verify", "qa:web", "qa:web:final", "qa:native:ios", "qa:native:android"]) {
+  assert.ok(research.includes("checked_at"));
+  assert.ok(research.includes("license_source"));
+  assert.ok(readme.includes("Draft Vs Final QA"));
+  assert.ok(readme.includes("npm run brief:new"));
+  for (const scriptName of ["setup", "verify", "qa:web", "qa:web:draft", "qa:web:ci", "qa:web:final", "qa:native:ios", "qa:native:android", "brief:new", "research:ledger"]) {
     assert.ok(pkg.scripts[scriptName], `package script missing: ${scriptName}`);
+  }
+});
+
+test("public package whitelist and docs avoid private generated artifacts", async () => {
+  const pkg = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
+  for (const entry of pkg.files) {
+    assert.equal(entry.includes(".design-director"), false);
+    assert.equal(entry.includes("node_modules"), false);
+    assert.equal(entry.includes("playwright-report"), false);
+  }
+  const publicFiles = ["README.md", "SKILL.md", "PROVENANCE.md", "REFERENCED_SKILLS.md", "REFERENCE_LICENSE_POLICY.md"];
+  const combined = (await Promise.all(publicFiles.map((file) => fs.readFile(path.join(repoRoot, file), "utf8")))).join("\n");
+  assert.equal(/\/Users\/|\/home\/|\/mnt\/data|\/workspace|browser profile/i.test(combined), false);
+  assert.equal(/Local installation checked/i.test(combined), false);
+});
+
+test("brief and research ledger initializers create required fields", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-init-"));
+  await runScript(["scripts/init-brief.mjs", "--out", out, "--surface", "dashboard"]);
+  await runScript(["scripts/init-research-ledger.mjs", "--out", out]);
+  const brief = await fs.readFile(path.join(out, "design-brief.md"), "utf8");
+  const ledger = await fs.readFile(path.join(out, "research-ledger.yaml"), "utf8");
+  assert.ok(brief.includes("`dashboard`"));
+  assert.ok(brief.includes("Missing local truth"));
+  assert.ok(brief.includes("Acceptance Gates"));
+  for (const field of ["checked_at", "license_source", "package_version_or_commit", "maintenance_signal_checked_at", "do_not_copy"]) {
+    assert.ok(ledger.includes(field), `ledger missing ${field}`);
   }
 });
 
@@ -1541,6 +1614,19 @@ test("native-qa-report passes complete iOS evidence", async () => {
   const raw = await fs.readFile(path.join(out, "native-design-qa.json"), "utf8");
   assert.equal(raw.includes(out), false);
   assert.equal(raw.includes("absolutePath"), false);
+});
+
+test("native helpers scaffold reports and print computed tooling hash", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-helper-"));
+  const reportPath = path.join(out, "native-ios-qa.json");
+  await runScript(["scripts/run-native-qa.mjs", "--platform", "native-ios", "--report", reportPath, "--init"]);
+  const report = JSON.parse(await fs.readFile(reportPath, "utf8"));
+  const expectedHash = stableHash(stableStringify(report.tooling), 16);
+  assert.equal(report.toolingHash, expectedHash);
+  assert.equal(report.platform, "native-ios");
+
+  const { stdout } = await runScript(["scripts/native-qa-report.mjs", "--report", reportPath, "--print-tooling-hash"]);
+  assert.equal(stdout.trim(), expectedHash);
 });
 
 test("native-qa-report rejects screenshots modified after report generation", async () => {

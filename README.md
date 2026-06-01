@@ -48,6 +48,8 @@ Common flows:
 - `scripts/discover-states.mjs`: active-state discovery for controls, overlays, scroll containers, charts, canvas/SVG, and form surfaces.
 - `scripts/qa-report.mjs`: merges web audit artifacts into `.design-director/design-qa.json` and `.design-director/design-qa.md`.
 - `scripts/native-qa-report.mjs`: validates native iOS/Android QA reports and evidence files.
+- `scripts/init-brief.mjs`: creates a new-build design brief scaffold.
+- `scripts/init-research-ledger.mjs`: creates a lawful inspiration/research ledger scaffold.
 - `scripts/lib/`: shared Playwright/browser/action/finding helpers.
 - `schemas/`: JSON Schemas for native QA reports; the web render config schema lives at `scripts/render.config.schema.json`.
 - `fixtures/`: generic paired good/bad fixtures for audit regression checks.
@@ -155,28 +157,34 @@ Use intent plus platform/surface:
 
 The intent is separate from the platform. Use `repair + native-ios` or `qa + native-android`; do not invent combined modes.
 
-## One-Command QA
+## Draft Vs Final QA
 
-For draft web QA:
+For draft web QA that creates evidence and initializes notes:
 
 ```sh
-npm run qa:web -- --url http://127.0.0.1:5173
+npm run qa:web:draft -- --url http://127.0.0.1:5173
 ```
 
 For non-interactive static pages:
 
 ```sh
-npm run qa:web -- --url file:///absolute/path/page.html --static
+npm run qa:web:draft -- --url file:///absolute/path/page.html --static
 ```
 
-The draft command creates screenshots, initializes screenshot notes, and writes
-`.design-director/design-qa.md`. It is not final acceptance until screenshot
-notes and state coverage are inspected.
+`npm run qa:web` remains a draft alias for convenience, but draft mode is not
+acceptance. It writes `ACCEPTANCE_READY=false` when inspection is incomplete and
+adds `nonFinalBecause` plus `nextActions` to `.design-director/design-qa.json`.
 
 For final web QA after notes and state coverage are resolved:
 
 ```sh
 npm run qa:web:final -- --config .design-director/render.config.json
+```
+
+For CI-style checks that must fail unless the report is acceptance-ready:
+
+```sh
+npm run qa:web:ci -- --config .design-director/render.config.json
 ```
 
 For native report validation:
@@ -190,6 +198,20 @@ Native reports must include `qaRunId`, `startedAt`, `finishedAt`,
 `toolingHash`, screenshots, UI hierarchy/tree files, and logs. The validator
 hashes artifacts and rejects stale or reused profile evidence.
 
+To scaffold native reports and compute the required tooling hash:
+
+```sh
+npm run qa:native:ios -- --init
+npm run qa:native:ios -- --print-tooling-hash --report .design-director/native-ios-qa.json
+```
+
+For new-build work, scaffold the brief and research ledger first:
+
+```sh
+npm run brief:new -- --surface marketing-web
+npm run research:ledger
+```
+
 ## Rendered QA Workflow
 
 1. Start the local app or point the config at a deployed URL.
@@ -201,6 +223,9 @@ hashes artifacts and rejects stale or reused profile evidence.
 7. Do not accept the design pass while unwaived blockers remain.
 
 Set a fresh shared `qaRunId` in `.design-director/render.config.json` or `DESIGN_DIRECTOR_QA_RUN_ID` before running discovery and the three web audit scripts. Final QA rejects generated run IDs, stale artifacts, mixed config hashes, mixed base URLs, screenshot hash drift, or script artifacts missing `evidenceHash`/timestamp metadata. Discovery and state-coverage artifacts must also be fresh and tied to the same configured run or current `discoveryHash`.
+
+`design-brief.md` must include source truth/local truth, anti-goals, and
+acceptance gates. Use `npm run brief:new` when starting from scratch.
 
 Example:
 
@@ -265,6 +290,15 @@ node ~/.codex/skills/design-director/scripts/native-qa-report.mjs \
   --profile standard \
   --out .design-director
 ```
+
+Minimal passing native report lifecycle:
+
+1. Capture screenshots, UI hierarchy/tree files, and logs.
+2. Set `qaRunId`, `startedAt`, and `finishedAt` in the report.
+3. Run `npm run qa:native:ios -- --print-tooling-hash --report <report>` or
+   the Android equivalent, then copy the printed value into `toolingHash`.
+4. Validate with `npm run qa:native:ios` or `npm run qa:native:android`.
+5. Inspect `.design-director/native-design-qa.md`.
 
 Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Profile labels in a report are descriptive only; coverage is inferred from fields such as `appearance`, `contentSize`, `keyboard`, `focusedEditable`, `theme`, `fontScale`, and `ime`. Each required profile needs its own screenshot and UI hierarchy/tree evidence unless the profile is explicitly marked not applicable. Use `notApplicableProfiles` with reason plus hierarchy/tree evidence only when a required profile truly does not apply, such as a read-only screen with no editable field. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
 

@@ -23,6 +23,8 @@ function parseArgs(argv) {
       args.allowPartialExitZero = true;
     } else if (arg === "--max-evidence-age-ms") {
       args.maxEvidenceAgeMs = Number(argv[++i]);
+    } else if (arg === "--print-tooling-hash") {
+      args.printToolingHash = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -31,7 +33,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: native-qa-report.mjs --report .design-director/native-ios-qa.json [--out .design-director] [--profile minimal|standard|deep] [--partial] [--allow-partial-exit-zero] [--max-evidence-age-ms 1800000]
+  return `Usage: native-qa-report.mjs --report .design-director/native-ios-qa.json [--out .design-director] [--profile minimal|standard|deep] [--partial] [--allow-partial-exit-zero] [--max-evidence-age-ms 1800000] [--print-tooling-hash]
 
 Validates native iOS/Android QA report evidence and writes:
 - native-design-qa.json
@@ -41,7 +43,10 @@ Missing screenshots, UI hierarchy/tree captures, logs, required profile coverage
 or target/tool metadata make the report incomplete. Failed/blocked matrix states
 are blockers; needs-review is incomplete unless --partial is supplied. Final
 native acceptance requires qaRunId, startedAt/finishedAt, toolingHash, fresh
-artifact hashes, and unique screenshot/tree evidence per required profile.`;
+artifact hashes, and unique screenshot/tree evidence per required profile.
+
+Use --print-tooling-hash after report.tooling is filled to get the exact
+toolingHash value expected by validation.`;
 }
 
 async function readJson(file) {
@@ -391,6 +396,10 @@ async function main() {
   const report = await readJson(reportPath);
   const maxEvidenceAgeMs = Number.isFinite(args.maxEvidenceAgeMs) ? args.maxEvidenceAgeMs : 30 * 60 * 1000;
   const runMetadata = nativeRunMetadata(report, maxEvidenceAgeMs);
+  if (args.printToolingHash) {
+    console.log(runMetadata.computedToolingHash);
+    return;
+  }
 
   const blockers = [];
   const incomplete = [];

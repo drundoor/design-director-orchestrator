@@ -39,7 +39,7 @@ async function main() {
   await run(npxCommand, ["playwright", "install", "chromium"]);
   await run(process.execPath, ["--check", "scripts/qa-report.mjs"]);
   await run(process.execPath, ["--check", "scripts/native-qa-report.mjs"]);
-  console.log("setup: ready. Next run `npm run verify` or start with `npm run qa:web -- --url <local-or-deployed-url>`.");
+  console.log("setup: ready. Next run `npm run verify`, scaffold with `npm run brief:new`, or start draft QA with `npm run qa:web:draft -- --url <local-or-deployed-url>`.");
 }
 
 main().catch((error) => {

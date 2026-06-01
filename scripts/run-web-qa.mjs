@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 function parseArgs(argv) {
-  const args = { out: ".design-director", depth: "2", timeout: "15000", final: false, static: false };
+  const args = { out: ".design-director", depth: "2", timeout: "15000", final: false, draft: false, ci: false, static: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") args.help = true;
@@ -19,7 +19,9 @@ function parseArgs(argv) {
     else if (arg === "--depth") args.depth = argv[++i];
     else if (arg === "--timeout") args.timeout = argv[++i];
     else if (arg === "--static") args.static = true;
+    else if (arg === "--draft") args.draft = true;
     else if (arg === "--final") args.final = true;
+    else if (arg === "--ci" || arg === "--strict") args.ci = true;
     else if (arg === "--qa-run-id") args.qaRunId = argv[++i];
     else if (arg === "--app-build-id") args.appBuildId = argv[++i];
     else throw new Error(`Unknown argument: ${arg}`);
@@ -28,12 +30,14 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: run-web-qa.mjs (--url <url>|--config .design-director/render.config.json) [--out .design-director] [--static] [--final] [--viewports 375x700,1440x900] [--depth 2]
+  return `Usage: run-web-qa.mjs (--url <url>|--config .design-director/render.config.json) [--out .design-director] [--static] [--draft|--final|--ci] [--viewports 375x700,1440x900] [--depth 2]
 
 Runs discovery, render capture, DOM audit, visual audit, and qa-report with one
-shared qaRunId. Draft mode initializes screenshot notes and exits 0 even when
-inspection is still incomplete. Use --final only after screenshot notes and
-state coverage have been inspected.`;
+shared qaRunId. Draft mode initializes screenshot notes, writes
+ACCEPTANCE_READY=false when inspection is incomplete, and is not final
+acceptance. Use --final after screenshot notes and state coverage are inspected.
+Use --ci when the command must exit nonzero unless design-qa.json has
+acceptanceReady: true.`;
 }
 
 function runStep(label, args, env, options = {}) {
@@ -57,7 +61,7 @@ async function writeConfigFromUrl(configPath, args, qaRunId, appBuildId) {
     : [{ width: 375, height: 700 }, { width: 1440, height: 1000 }];
   const config = {
     url: args.url,
-    qaProfile: args.static ? "static" : args.final ? "final-qa" : "audit",
+    qaProfile: args.static ? "static" : (args.final || args.ci) ? "final-qa" : "audit",
     qaRunId,
     appBuildId,
     viewports,
@@ -67,6 +71,27 @@ async function writeConfigFromUrl(configPath, args, qaRunId, appBuildId) {
   await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
+async function readQaSummary(outDir) {
+  try {
+    const qa = JSON.parse(await fs.readFile(path.join(outDir, "design-qa.json"), "utf8"));
+    return {
+      status: qa.status || "unknown",
+      qaMode: qa.qaMode || "unknown",
+      acceptanceReady: Boolean(qa.acceptanceReady),
+      nonFinalBecause: Array.isArray(qa.nonFinalBecause) ? qa.nonFinalBecause : [],
+      nextActions: Array.isArray(qa.nextActions) ? qa.nextActions : [],
+    };
+  } catch {
+    return {
+      status: "missing",
+      qaMode: "missing",
+      acceptanceReady: false,
+      nonFinalBecause: ["design-qa.json was not written"],
+      nextActions: ["Fix the failed QA step and rerun the wrapper."],
+    };
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -74,6 +99,8 @@ async function main() {
     return;
   }
   if (!args.url && !args.config) throw new Error("Provide --url or --config");
+  if (args.draft && (args.final || args.ci)) throw new Error("--draft cannot be combined with --final or --ci");
+  if (args.final && args.ci) throw new Error("--final and --ci are separate modes; use one");
 
   const outDir = path.resolve(args.out);
   await fs.mkdir(outDir, { recursive: true });
@@ -83,10 +110,11 @@ async function main() {
   let configPath = args.config ? path.resolve(args.config) : path.join(outDir, "render.config.json");
   if (!args.config) await writeConfigFromUrl(configPath, args, qaRunId, appBuildId);
 
+  const finalLike = args.final || args.ci;
   if (!args.static) {
     const discoverArgs = ["scripts/discover-states.mjs", "--config", configPath, "--out", outDir, "--depth", args.depth, "--timeout", args.timeout];
     if (args.viewports) discoverArgs.push("--viewports", args.viewports, "--viewport-mode", "all");
-    await runStep("discover active states", discoverArgs, env, { allowFailure: !args.final });
+    await runStep("discover active states", discoverArgs, env, { allowFailure: !finalLike });
     const discoveredConfig = path.join(outDir, "render.config.discovered.json");
     try {
       await fs.access(discoveredConfig);
@@ -102,13 +130,25 @@ async function main() {
 
   const reportArgs = ["scripts/qa-report.mjs", "--out", outDir, "--init-notes"];
   if (args.static) reportArgs.push("--static");
-  if (!args.final) reportArgs.push("--partial", "--allow-partial-exit-zero");
+  if (!finalLike) reportArgs.push("--partial", "--allow-partial-exit-zero");
   const reportCode = await runStep("merge QA report", reportArgs, env, { allowFailure: !args.final });
+  const qaSummary = await readQaSummary(outDir);
   console.log(`qa:web: qaRunId=${qaRunId}`);
-  if (!args.final) {
+  console.log(`qa:web: status=${qaSummary.status}`);
+  console.log(`qa:web: qaMode=${qaSummary.qaMode}`);
+  console.log(`qa:web: ACCEPTANCE_READY=${qaSummary.acceptanceReady ? "true" : "false"}`);
+  if (!qaSummary.acceptanceReady) {
+    console.log(`qa:web: NON_FINAL_BECAUSE=${qaSummary.nonFinalBecause.join(" | ") || "acceptanceReady is false"}`);
+  }
+  if (!finalLike) {
+    console.log("qa:web: DRAFT_NOT_ACCEPTANCE=true");
     console.log(`qa:web: draft complete. Inspect ${path.join(outDir, "screenshot-notes.md")}, resolve state coverage, then run npm run qa:web:final -- --config ${configPath} --out ${outDir}${args.static ? " --static" : ""}`);
   }
-  if (args.final && reportCode !== 0) process.exitCode = reportCode;
+  if (args.ci && !qaSummary.acceptanceReady) {
+    process.exitCode = reportCode || 1;
+  } else if (args.final && reportCode !== 0) {
+    process.exitCode = reportCode;
+  }
 }
 
 main().catch((error) => {

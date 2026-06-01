@@ -6,7 +6,7 @@ import { runActions } from "./lib/actions.mjs";
 import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, slug, stableHash, stableStringify, stateIdFor, writeJson } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
-  const args = { out: ".design-director", timeout: 15000, maxCandidates: 80, viewportMode: "smallest-largest", routesMode: "all", depth: 1 };
+  const args = { out: ".design-director", timeout: 15000, maxCandidates: 80, viewportMode: "smallest-largest", routesMode: "all", depth: 1, focusScan: true, focusSteps: 30 };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -29,6 +29,12 @@ function parseArgs(argv) {
       args.routesMode = argv[++i];
     } else if (arg === "--depth") {
       args.depth = Number(argv[++i]);
+    } else if (arg === "--focus-scan") {
+      args.focusScan = true;
+    } else if (arg === "--no-focus-scan") {
+      args.focusScan = false;
+    } else if (arg === "--focus-steps") {
+      args.focusSteps = Number(argv[++i]);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -37,7 +43,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: discover-states.mjs --url <url> [--config .design-director/render.config.json] [--out .design-director] [--viewport-mode smallest-largest|all|largest] [--routes all|first] [--depth 1|2]
+  return `Usage: discover-states.mjs --url <url> [--config .design-director/render.config.json] [--out .design-director] [--viewport-mode smallest-largest|all|largest] [--routes all|first] [--depth 1|2] [--no-focus-scan] [--focus-steps 30]
 
 Scans a rendered web page and emits:
 - discovered-states.json: interactive candidates with confidence and mutation risk.
@@ -56,19 +62,23 @@ const KIND_PRIORITY = new Map([
   ["overlay-trigger", 0],
   ["select", 1],
   ["combobox", 2],
-  ["text-input", 3],
-  ["tooltip-trigger", 4],
-  ["chart-or-canvas", 5],
-  ["scroll-container", 6],
-  ["tab", 7],
-  ["disclosure", 8],
-  ["safe-button", 9],
+  ["keyboard-combobox", 3],
+  ["focus-overlay", 4],
+  ["text-input", 5],
+  ["tooltip-trigger", 6],
+  ["chart-or-canvas", 7],
+  ["scroll-container", 8],
+  ["tab", 9],
+  ["disclosure", 10],
+  ["safe-button", 11],
 ]);
 
 const DRAFT_KIND_LIMITS = new Map([
   ["overlay-trigger", 5],
   ["select", 4],
   ["combobox", 4],
+  ["keyboard-combobox", 4],
+  ["focus-overlay", 4],
   ["text-input", 4],
   ["tooltip-trigger", 3],
   ["chart-or-canvas", 4],
@@ -77,6 +87,30 @@ const DRAFT_KIND_LIMITS = new Map([
   ["disclosure", 4],
   ["safe-button", 4],
 ]);
+
+function candidateIdentity(candidate) {
+  const viewport = candidate.discoveredFrom?.viewport;
+  return [
+    candidate.kind,
+    candidate.selector,
+    candidate.action?.type || "no-action",
+    candidate.discoveredFrom?.state || "default",
+    candidate.discoveredFrom?.url || "unknown-url",
+    viewport ? `${viewport.width}x${viewport.height}` : "unknown-viewport",
+  ].join("|");
+}
+
+function uniqueCandidates(candidates) {
+  const seen = new Set();
+  const unique = [];
+  for (const candidate of candidates) {
+    const key = candidateIdentity(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
+  return unique;
+}
 
 function candidateBucket(candidate) {
   const viewport = candidate.discoveredFrom?.viewport;
@@ -214,6 +248,144 @@ async function discoverNestedCandidates({ browser, baseUrl, config, targetState,
   }
 }
 
+async function discoverFocusCandidates(page, maxSteps) {
+  const candidates = [];
+  for (let step = 0; step < maxSteps; step += 1) {
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(80);
+    candidates.push(...await page.evaluate((focusStep) => {
+      const visible = (el) => {
+        if (!el || !(el instanceof Element)) return false;
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0.01;
+      };
+      const cssEscape = (value) => window.CSS?.escape ? CSS.escape(value) : String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+      const selectorFor = (el) => {
+        if (el.id) return `#${cssEscape(el.id)}`;
+        const label = el.getAttribute("aria-label") || el.getAttribute("name") || el.getAttribute("placeholder");
+        if (label) return `${el.tagName.toLowerCase()}[${el.getAttribute("aria-label") ? "aria-label" : el.getAttribute("name") ? "name" : "placeholder"}="${label.replace(/"/g, '\\"')}"]`;
+        const siblings = [...(el.parentElement?.children || [])].filter((child) => child.tagName === el.tagName);
+        const nth = siblings.length > 1 ? `:nth-of-type(${siblings.indexOf(el) + 1})` : "";
+        return `${el.tagName.toLowerCase()}${nth}`;
+      };
+      const labelFor = (el) => (el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.getAttribute("title") || el.innerText || el.textContent || el.id || el.tagName.toLowerCase()).trim().replace(/\s+/g, " ");
+      const riskFor = (el, label) => {
+        const type = (el.getAttribute("type") || "").toLowerCase();
+        const text = `${label} ${el.id || ""} ${el.className || ""}`.toLowerCase();
+        if (el.closest("form") && /(submit|send|save|delete|remove|archive|purchase|checkout|pay|confirm|publish|post|upload)/.test(text)) return "destructive";
+        if (["submit", "file", "password"].includes(type)) return type === "submit" ? "destructive" : "sensitive";
+        if (/(delete|remove|archive|purchase|checkout|pay|confirm|publish|post|send|save)/.test(text)) return "destructive";
+        if (/(email|phone|address|password|token|secret|card|ssn)/.test(text)) return "sensitive";
+        return "safe";
+      };
+      const active = document.activeElement;
+      if (!visible(active) || active === document.body || active === document.documentElement) return [];
+      const role = active.getAttribute("role") || "";
+      const tag = active.tagName.toLowerCase();
+      const selector = selectorFor(active);
+      const label = labelFor(active).slice(0, 120);
+      const rect = active.getBoundingClientRect();
+      const controlledId = active.getAttribute("aria-controls");
+      const controlled = controlledId ? document.getElementById(controlledId) : null;
+      const controlledVisible = visible(controlled);
+      const hasPopup = active.getAttribute("aria-haspopup");
+      const describedBy = active.getAttribute("aria-describedby");
+      const description = describedBy ? document.getElementById(describedBy) : null;
+      const tooltipVisible = visible(description) || Boolean(active.getAttribute("title") || active.getAttribute("data-tooltip") || active.getAttribute("data-tooltip-content"));
+      const base = {
+        selector,
+        label,
+        tag,
+        role: role || null,
+        rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+        labelConfidence: active.getAttribute("aria-label") || active.getAttribute("name") ? "high" : label ? "medium" : "low",
+        mutationRisk: riskFor(active, label),
+        source: "focus-scan",
+        focusStep,
+      };
+      const found = [];
+      if (role === "combobox" || /listbox|menu/.test(String(hasPopup || ""))) {
+        found.push({
+          ...base,
+          kind: "keyboard-combobox",
+          confidence: "high",
+          action: { type: "focus", selector },
+          postActions: [{ type: "press", selector, key: "ArrowDown" }, { type: "waitForStableLayout", ms: 150 }],
+          followUp: "Verify keyboard-opened menu/listbox is visible, topmost, and navigable.",
+        });
+      }
+      if ((controlledId || hasPopup) && controlledVisible) {
+        found.push({
+          ...base,
+          kind: "focus-overlay",
+          confidence: "high",
+          action: { type: "focus", selector },
+          postActions: controlledId ? [{ type: "assertVisible", selector: `#${cssEscape(controlledId)}`, timeout: 1000 }] : [{ type: "waitForStableLayout", ms: 150 }],
+          followUp: "Verify focus-opened overlay is topmost, not clipped, and touch/keyboard reachable.",
+        });
+      }
+      if (tooltipVisible) {
+        found.push({
+          ...base,
+          kind: "tooltip-trigger",
+          confidence: "medium",
+          action: { type: "focus", selector },
+          postActions: [{ type: "waitForStableLayout", ms: 150 }],
+          followUp: "Verify tooltip is visible on focus and does not hide controls or content.",
+        });
+      }
+      return found;
+    }, step));
+  }
+  return uniqueCandidates(candidates).slice(0, maxSteps);
+}
+
+function summarizeCandidates(candidates, selectedCandidates) {
+  const selected = new Set(selectedCandidates);
+  const byKind = {};
+  const byMutationRisk = {};
+  const byRouteViewport = {};
+  for (const candidate of candidates) {
+    byKind[candidate.kind] = (byKind[candidate.kind] || 0) + 1;
+    const risk = candidate.mutationRisk || "unknown";
+    byMutationRisk[risk] = (byMutationRisk[risk] || 0) + 1;
+    const viewport = candidate.discoveredFrom?.viewport;
+    const routeViewport = [
+      candidate.discoveredFrom?.state || "default",
+      viewport ? `${viewport.width}x${viewport.height}` : "unknown-viewport",
+    ].join("|");
+    byRouteViewport[routeViewport] = (byRouteViewport[routeViewport] || 0) + 1;
+  }
+  const skippedCandidates = candidates
+    .filter((candidate) => !selected.has(candidate))
+    .map((candidate) => ({
+      kind: candidate.kind,
+      selector: candidate.selector,
+      label: candidate.label || null,
+      mutationRisk: candidate.mutationRisk || "unknown",
+      confidence: candidate.confidence || "unknown",
+      state: candidate.discoveredFrom?.state || "default",
+      viewport: candidate.discoveredFrom?.viewport || null,
+      reason: candidate.mutationRisk !== "safe"
+        ? `mutation risk is ${candidate.mutationRisk}`
+        : !candidate.action
+          ? "no safe action generated"
+          : "not selected for draft limit or duplicate coverage",
+    }));
+  const skippedByReason = {};
+  for (const item of skippedCandidates) skippedByReason[item.reason] = (skippedByReason[item.reason] || 0) + 1;
+  return {
+    total: candidates.length,
+    selectedDraftStates: selectedCandidates.length,
+    byKind,
+    byMutationRisk,
+    byRouteViewport,
+    skippedByReason,
+    skippedCandidates,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -242,6 +414,8 @@ async function main() {
       viewportMode: args.viewportMode,
       routesMode: args.routesMode,
       depth: args.depth,
+      focusScan: args.focusScan,
+      focusSteps: args.focusSteps,
       viewportsOverride: args.viewports || null,
     },
   }, startedAt);
@@ -267,6 +441,8 @@ async function main() {
     viewports,
     scans: [],
     candidates: [],
+    skippedCandidates: [],
+    candidateSummary: {},
     draftConfigPath: path.join(outDir, "render.config.discovered.json"),
     setupActions: (config.actions || []).length ? "configured actions are run during scans" : "none configured",
   };
@@ -452,6 +628,11 @@ async function main() {
         });
             return candidates.slice(0, maxCandidates);
           }, args.maxCandidates);
+          if (args.focusScan) {
+            const focusCandidates = await discoverFocusCandidates(page, args.focusSteps);
+            scan.focusCandidateCount = focusCandidates.length;
+            scan.candidates = uniqueCandidates([...scan.candidates, ...focusCandidates]).slice(0, args.maxCandidates);
+          }
           scan.ok = true;
         } catch (error) {
           scan.error = error.message;
@@ -504,7 +685,7 @@ async function main() {
     await browser.close();
   }
 
-  results.candidates = sortCandidates(results.candidates);
+  results.candidates = sortCandidates(uniqueCandidates(results.candidates));
   results.finishedAt = new Date().toISOString();
   results.discoveryHash = stableHash(stableStringify({
     baseUrl,
@@ -514,7 +695,10 @@ async function main() {
     candidates: results.candidates,
     scriptOptions: results.scriptOptions,
   }), 16);
-  const safeStates = draftCandidates(results.candidates, Math.min(24, args.maxCandidates))
+  const selectedDraftCandidates = draftCandidates(results.candidates, Math.min(24, args.maxCandidates));
+  results.candidateSummary = summarizeCandidates(results.candidates, selectedDraftCandidates);
+  results.skippedCandidates = results.candidateSummary.skippedCandidates;
+  const safeStates = selectedDraftCandidates
     .map((candidate, index) => {
       const sourceState = targetStates.find((state) => (state.name || "default") === candidate.discoveredFrom?.state) || {};
       const state = {
@@ -561,7 +745,8 @@ async function main() {
 
   await writeJson(path.join(outDir, "discovered-states.json"), results);
   await writeJson(results.draftConfigPath, draftConfig);
-  console.log(`discover-states: wrote ${path.join(outDir, "discovered-states.json")} and ${results.draftConfigPath} (${results.candidates.length} candidates, ${safeStates.length} draft states)`);
+  console.log(`discover-states: wrote ${path.join(outDir, "discovered-states.json")} and ${results.draftConfigPath} (${results.candidates.length} candidates, ${safeStates.length} draft states, ${results.skippedCandidates.length} skipped)`);
+  console.log(`discover-states: candidates by kind ${JSON.stringify(results.candidateSummary.byKind)}`);
 }
 
 main().catch((error) => {

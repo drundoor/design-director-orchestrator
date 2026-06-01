@@ -44,6 +44,15 @@ Schema. Then run `scripts/native-qa-report.mjs --report <report> --out
 screenshots, UI tree captures, logs, run metadata, artifact hashes, or tooling
 metadata are not acceptance evidence.
 
+Minimal passing lifecycle:
+
+1. Capture screenshots, UI tree files, and logs.
+2. Set `qaRunId`, `startedAt`, and `finishedAt` after capture.
+3. Run `npm run qa:native:android -- --print-tooling-hash --report <report>`
+   and copy the printed value into `toolingHash`.
+4. Validate with `npm run qa:native:android -- --report <report>`.
+5. Inspect `.design-director/native-design-qa.md`.
+
 Required profile coverage is inferred from concrete metadata, not from
 `profile` or `profiles` labels alone. For standard QA, light, dark, large font
 scale, and IME-focused states must be backed by matching fields such as
