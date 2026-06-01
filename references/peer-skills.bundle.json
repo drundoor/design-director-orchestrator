@@ -7,6 +7,7 @@
       "homepage": "https://github.com/pbakaus/impeccable",
       "ref": "skill-v3.5.0",
       "skillPath": "plugin/skills/impeccable",
+      "expectedSkillEntrypoint": "SKILL.md",
       "targetName": "impeccable",
       "expectedLicenses": ["Apache-2.0"],
       "licenseFiles": ["LICENSE"],
@@ -16,8 +17,9 @@
     "hallmark": {
       "repo": "https://github.com/Nutlope/hallmark.git",
       "homepage": "https://github.com/Nutlope/hallmark",
-      "ref": "main",
+      "ref": "39fe438bf930b040c7a60350d18a0e3b54a24a5a",
       "skillPath": "skills/hallmark",
+      "expectedSkillEntrypoint": "SKILL.md",
       "targetName": "hallmark",
       "expectedLicenses": ["MIT"],
       "licenseFiles": ["LICENSE"],

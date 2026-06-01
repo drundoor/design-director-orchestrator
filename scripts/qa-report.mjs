@@ -136,6 +136,10 @@ function artifactPath(outDir, file) {
   return path.relative(outDir, absolute).replaceAll(path.sep, "/");
 }
 
+function absoluteLike(value) {
+  return path.isAbsolute(String(value || "")) || /^[A-Za-z]:[\\/]/.test(String(value || ""));
+}
+
 function normalizeUrl(value) {
   if (!value) return "unknown-url";
   try {
@@ -453,6 +457,52 @@ function parseFields(section) {
     if (match) fields.set(match[1].trim().toLowerCase(), match[2].trim());
   }
   return fields;
+}
+
+function markdownAnchor(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/`/g, "")
+    .replace(/[^a-z0-9\s/_-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function parseEvidenceReference(reference) {
+  const [file, fragment] = String(reference || "").split("#");
+  return {
+    file: String(file || "").trim(),
+    fragment: String(fragment || "").trim(),
+  };
+}
+
+async function readMarkdownSection(outDir, reference) {
+  const parsed = parseEvidenceReference(reference);
+  if (!parsed.file || !evidencePathInside(outDir, parsed.file)) return null;
+  const filePath = resolveEvidencePath(outDir, parsed.file);
+  let text = "";
+  try {
+    text = await fs.readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  if (!parsed.fragment) return text;
+  const lines = text.split(/\r?\n/);
+  let active = false;
+  const body = [];
+  for (const line of lines) {
+    const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (heading) {
+      if (active) break;
+      const title = heading[2].trim();
+      active = title === parsed.fragment || markdownAnchor(title) === markdownAnchor(parsed.fragment);
+      continue;
+    }
+    if (active) body.push(line);
+  }
+  return active ? body.join("\n") : null;
 }
 
 function invalidFieldValue(field, value) {
@@ -906,6 +956,10 @@ const DESIGN_VERDICT_FIELDS = [
 ];
 const PEER_SKILL_STATUSES = new Set(["available", "unavailable-fallback-used", "user-waived", "skipped-while-available"]);
 const REFERENCE_OUTCOMES = new Set(["lean-complete", "local-system-sufficient", "offline-constrained", "user-forbids-browsing", "deep-requested"]);
+const FALLBACK_CHECKS = {
+  impeccable: ["craftCompleteness", "styleCommitment", "layoutHierarchy", "typographyConsistency", "responsiveAdaptation"],
+  hallmark: ["genericScaffold", "decorativePills", "fakeChrome", "stockHero", "weakHierarchy"],
+};
 
 function asArray(value) {
   if (!value) return [];
@@ -936,7 +990,97 @@ async function validateEvidenceReferences(outDir, references, label, incomplete)
   return valid;
 }
 
-function peerSkillProblems(name, peerSkill = {}) {
+async function validateEvidenceFileReference(outDir, reference, label, incomplete, options = {}) {
+  const ref = typeof reference === "string" ? reference : reference?.path;
+  if (!String(ref || "").trim()) {
+    incomplete.push(`${label} needs an evidence path`);
+    return null;
+  }
+  if (absoluteLike(ref)) {
+    incomplete.push(`${label} must use a repo-relative or .design-director-relative path, not an absolute path: ${ref}`);
+    return null;
+  }
+  const parsed = parseEvidenceReference(ref);
+  if (!parsed.file) {
+    incomplete.push(`${label} evidence path is empty`);
+    return null;
+  }
+  const insideOutDir = evidencePathInside(outDir, parsed.file);
+  const outputPath = insideOutDir ? resolveEvidencePath(outDir, parsed.file) : path.resolve(parsed.file);
+  if (!insideOutDir && options.outputOnly !== false) {
+    incomplete.push(`${label} evidence must be inside ${path.basename(outDir)}: ${ref}`);
+    return null;
+  }
+  if (!(await pathExists(outputPath))) {
+    incomplete.push(`${label} evidence path does not exist: ${ref}`);
+    return null;
+  }
+  return { ref, path: outputPath };
+}
+
+async function fallbackChecklistProblems(outDir, name, peerSkill = {}) {
+  const incomplete = [];
+  const fallbackEvidence = peerSkill.fallbackEvidence || peerSkill.fallback_evidence || peerSkill.fallbackSummary || peerSkill.fallback_summary || "";
+  if (!fallbackEvidence || typeof fallbackEvidence !== "object" || Array.isArray(fallbackEvidence)) {
+    incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence must be an object with path and requiredChecks`);
+    return incomplete;
+  }
+  const requiredChecks = asArray(fallbackEvidence.requiredChecks || fallbackEvidence.required_checks);
+  const expectedChecks = FALLBACK_CHECKS[name] || [];
+  const missingExpected = expectedChecks.filter((check) => !requiredChecks.includes(check));
+  if (!requiredChecks.length) {
+    incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence.requiredChecks is required`);
+  } else if (missingExpected.length) {
+    incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence.requiredChecks is missing ${missingExpected.join(", ")}`);
+  }
+  const evidence = await validateEvidenceFileReference(outDir, fallbackEvidence.path, `design-quality.json peerSkills.${name}.fallbackEvidence.path`, incomplete);
+  if (!evidence) return incomplete;
+  const sectionText = await readMarkdownSection(outDir, fallbackEvidence.path);
+  if (!sectionText) {
+    incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence.path must reference an existing markdown section: ${fallbackEvidence.path}`);
+    return incomplete;
+  }
+  for (const check of requiredChecks) {
+    const pattern = new RegExp(`${check.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]{0,140}\\b(pass|passed|checked|complete|completed|reject|rejected|none|n/a|not applicable)\\b`, "i");
+    if (!pattern.test(sectionText) || /\bTODO\b/i.test(sectionText)) {
+      incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence section must record a filled outcome for ${check}`);
+    }
+  }
+  return incomplete;
+}
+
+async function peerExecutionEvidenceProblems(outDir, name, peerSkill = {}) {
+  const incomplete = [];
+  const executionEvidence = peerSkill.executionEvidence || peerSkill.execution_evidence || "";
+  if (!executionEvidence || typeof executionEvidence !== "object" || Array.isArray(executionEvidence)) {
+    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence must be an object with path and summary`);
+    return incomplete;
+  }
+  const summary = executionEvidence.summary || executionEvidence.outcome || executionEvidence.result || "";
+  const commands = asArray(executionEvidence.commands || executionEvidence.loadedCommands || executionEvidence.loaded_commands);
+  const references = asArray(executionEvidence.references || executionEvidence.loadedReferences || executionEvidence.loaded_references);
+  const checks = asArray(executionEvidence.checks || executionEvidence.requiredChecks || executionEvidence.required_checks);
+  if (!String(summary).trim() && !commands.length && !references.length && !checks.length) {
+    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence needs summary, commands, references, or checks`);
+  }
+  const evidence = await validateEvidenceFileReference(outDir, executionEvidence.path, `design-quality.json peerSkills.${name}.executionEvidence.path`, incomplete);
+  if (!evidence) return incomplete;
+  const sectionText = await readMarkdownSection(outDir, executionEvidence.path);
+  if (!sectionText) {
+    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence.path must reference an existing markdown section: ${executionEvidence.path}`);
+    return incomplete;
+  }
+  if (/\bTODO\b/i.test(sectionText)) {
+    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence section still contains TODO text`);
+  }
+  const sectionHasOutcome = /\b(loaded|ran|used|checked|executed|reviewed|applied|pass|passed|complete|completed)\b/i.test(sectionText);
+  if (!sectionHasOutcome) {
+    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence section must record what was loaded, run, checked, or applied`);
+  }
+  return incomplete;
+}
+
+async function peerSkillProblems(outDir, name, peerSkill = {}) {
   const incomplete = [];
   const normalized = {
     status: peerSkill.status || "",
@@ -953,16 +1097,14 @@ function peerSkillProblems(name, peerSkill = {}) {
   if (!PEER_SKILL_STATUSES.has(normalized.status)) {
     incomplete.push(`design-quality.json peerSkills.${name}.status must be available, unavailable-fallback-used, user-waived, or skipped-while-available`);
   }
-  if (normalized.status === "available" && !String(normalized.executionEvidence).trim()) {
-    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence is required when the peer skill is available`);
+  if (normalized.status === "available") {
+    incomplete.push(...await peerExecutionEvidenceProblems(outDir, name, peerSkill));
   }
   if (normalized.status === "unavailable-fallback-used") {
     if (!normalized.fallbackChecklistCompleted) {
       incomplete.push(`design-quality.json peerSkills.${name}.fallbackChecklistCompleted must be true when unavailable fallback is used`);
     }
-    if (!String(normalized.fallbackEvidence).trim()) {
-      incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence is required when unavailable fallback is used`);
-    }
+    incomplete.push(...await fallbackChecklistProblems(outDir, name, peerSkill));
   }
   if (normalized.status === "user-waived" && !String(normalized.waiverEvidence || normalized.reason).trim()) {
     incomplete.push(`design-quality.json peerSkills.${name}.waiverEvidence or reason is required when user waived the peer skill`);
@@ -973,7 +1115,32 @@ function peerSkillProblems(name, peerSkill = {}) {
   return { normalized, incomplete };
 }
 
-function referenceDiscoveryProblems(referenceDiscovery = {}, gate = {}, deepExploration = {}) {
+async function validateLocalEvidence(outDir, references, label, incomplete) {
+  const entries = asArray(references).map((item) => typeof item === "string" ? item : (item.path || item.source || "")).filter(Boolean);
+  if (!entries.length) {
+    incomplete.push(`${label} is required`);
+    return;
+  }
+  for (const entry of entries) {
+    if (absoluteLike(entry)) {
+      incomplete.push(`${label} must not use absolute paths: ${entry}`);
+      continue;
+    }
+    const parsed = parseEvidenceReference(entry);
+    if (!parsed.file) {
+      incomplete.push(`${label} has an empty evidence reference`);
+      continue;
+    }
+    if (evidencePathInside(outDir, parsed.file)) {
+      if (!(await pathExists(resolveEvidencePath(outDir, parsed.file)))) incomplete.push(`${label} evidence path does not exist: ${entry}`);
+      continue;
+    }
+    const repoRelative = path.resolve(parsed.file);
+    if (!(await pathExists(repoRelative))) incomplete.push(`${label} evidence path does not exist: ${entry}`);
+  }
+}
+
+async function referenceDiscoveryProblems(outDir, referenceDiscovery = {}, gate = {}, deepExploration = {}) {
   const incomplete = [];
   const warnings = [];
   const outcome = referenceDiscovery.outcome || referenceDiscovery.status || "";
@@ -992,9 +1159,7 @@ function referenceDiscoveryProblems(referenceDiscovery = {}, gate = {}, deepExpl
     }
   }
   if (outcome === "local-system-sufficient") {
-    if (!String(referenceDiscovery.localDesignSystemEvidence || referenceDiscovery.local_design_system_evidence || "").trim()) {
-      incomplete.push("design-quality.json referenceDiscovery.localDesignSystemEvidence is required for local-system-sufficient");
-    }
+    await validateLocalEvidence(outDir, referenceDiscovery.localDesignSystemEvidence || referenceDiscovery.local_design_system_evidence, "design-quality.json referenceDiscovery.localDesignSystemEvidence", incomplete);
     if (!String(referenceDiscovery.tasteDecision || referenceDiscovery.taste_decision || "").trim()) {
       incomplete.push("design-quality.json referenceDiscovery.tasteDecision is required for local-system-sufficient");
     }
@@ -1007,6 +1172,8 @@ function referenceDiscoveryProblems(referenceDiscovery = {}, gate = {}, deepExpl
     const accepted = asArray(deep.acceptedSources || deep.accepted_sources);
     const rejected = asArray(deep.rejectedSources || deep.rejected_sources);
     const directions = asArray(deep.directions);
+    const artifact = deep.artifact || deep.researchLedgerPath || deep.research_ledger_path;
+    await validateEvidenceFileReference(outDir, artifact, "design-quality.json deepExploration.artifact", incomplete);
     if (!accepted.length) incomplete.push("design-quality.json deepExploration.acceptedSources is required for deep design exploration");
     if (!rejected.length) incomplete.push("design-quality.json deepExploration.rejectedSources is required for deep design exploration");
     if (!deep.studyOnly && (directions.length < 2 || directions.length > 3)) {
@@ -1022,7 +1189,125 @@ function referenceDiscoveryProblems(referenceDiscovery = {}, gate = {}, deepExpl
   return { incomplete, warnings };
 }
 
-async function validateDesignQualityArtifact({ artifact, gate, outDir }) {
+function verdictRecord(verdict, field) {
+  const raw = verdict[field];
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return {
+      verdict: String(raw.verdict || raw.status || raw.value || "").trim().toLowerCase(),
+      evidence: asArray(raw.evidence || raw.reviewEvidence || raw.review_evidence),
+    };
+  }
+  return {
+    verdict: String(raw || "").trim().toLowerCase(),
+    evidence: asArray(verdict[`${field}Evidence`] || verdict[`${field}_evidence`]),
+  };
+}
+
+function noteProblemPaths(problems = []) {
+  const paths = new Set();
+  for (const problem of problems) {
+    const pathPart = String(problem).split(":")[0];
+    if (pathPart) paths.add(pathPart);
+  }
+  return paths;
+}
+
+function screenshotIntegrityMap(screenshotNotes = {}) {
+  const map = new Map();
+  for (const item of screenshotNotes.integrity || []) {
+    const p = artifactPath(process.cwd(), item.path || "");
+    if (item.path) {
+      map.set(item.path, item);
+      map.set(p, item);
+      map.set(String(item.path).replaceAll("\\", "/"), item);
+    }
+  }
+  return map;
+}
+
+function evidenceScreenshotPath(reference, notesPath, outDir) {
+  const parsed = parseEvidenceReference(reference);
+  if (!parsed.file) return "";
+  const filePath = artifactPath(outDir, parsed.file);
+  const normalizedNotes = artifactPath(outDir, notesPath);
+  if (filePath === normalizedNotes || path.basename(filePath) === "screenshot-notes.md") {
+    return parsed.fragment || "";
+  }
+  return filePath;
+}
+
+async function validateDesignEvidenceReferences({
+  outDir,
+  notesPath,
+  notesText,
+  screenshots,
+  screenshotNotes,
+  reviewedScreenshotHashes,
+  references,
+  label,
+  incomplete,
+}) {
+  const entries = asArray(references).map((item) => String(item || "").trim()).filter(Boolean);
+  const cited = [];
+  if (!entries.length) {
+    incomplete.push(`${label} needs per-verdict screenshot-note evidence`);
+    return cited;
+  }
+  const sections = parseNoteSections(notesText, outDir);
+  const screenshotMap = new Map(screenshots.map((screenshot) => [screenshot.path, screenshot]));
+  const integrityMap = screenshotIntegrityMap(screenshotNotes);
+  const invalidPaths = noteProblemPaths(screenshotNotes.invalid);
+  const failedPaths = noteProblemPaths(screenshotNotes.failed);
+  for (const entry of entries) {
+    const parsed = parseEvidenceReference(entry);
+    if (!parsed.file || !(await evidenceReferenceExists(outDir, parsed.file))) {
+      incomplete.push(`${label} evidence must reference an existing file inside ${path.basename(outDir)}: ${entry}`);
+      continue;
+    }
+    const screenshotPath = evidenceScreenshotPath(entry, notesPath, outDir);
+    const screenshot = screenshotMap.get(screenshotPath);
+    if (!screenshot) {
+      incomplete.push(`${label} evidence must point to a current screenshot manifest entry: ${entry}`);
+      continue;
+    }
+    if (!sections.get(screenshot.path)) {
+      incomplete.push(`${label} evidence must point to an inspected screenshot-note section: ${entry}`);
+      continue;
+    }
+    if (invalidPaths.has(screenshot.path)) {
+      incomplete.push(`${label} evidence points to an incomplete screenshot-note section: ${entry}`);
+    }
+    if (failedPaths.has(screenshot.path)) {
+      incomplete.push(`${label} evidence points to a failed screenshot-note section: ${entry}`);
+    }
+    const integrity = integrityMap.get(screenshot.path);
+    const expectedHash = reviewedScreenshotHashes?.[screenshot.path] || reviewedScreenshotHashes?.[entry] || reviewedScreenshotHashes?.[screenshotPath];
+    if (!expectedHash) {
+      incomplete.push(`${label} reviewedScreenshotHashes is missing ${screenshot.path}`);
+    } else if (!integrity?.sha256 || expectedHash !== integrity.sha256) {
+      incomplete.push(`${label} reviewedScreenshotHashes.${screenshot.path} does not match the current screenshot file`);
+    }
+    cited.push(screenshot.path);
+  }
+  return cited;
+}
+
+function evidenceCoverageProblems(citedPaths, screenshots, briefText, incomplete, warnings) {
+  const cited = new Set(citedPaths);
+  const citedScreenshots = screenshots.filter((screenshot) => cited.has(screenshot.path));
+  const hasMobile = citedScreenshots.some((screenshot) => Number(screenshot.viewport?.width || 0) && Number(screenshot.viewport.width) <= 700);
+  const hasDesktop = citedScreenshots.some((screenshot) => Number(screenshot.viewport?.width || 0) >= 900);
+  if (!hasMobile) incomplete.push("design-quality.json evidence must include at least one mobile/narrow screenshot for broad final design QA");
+  if (!hasDesktop) incomplete.push("design-quality.json evidence must include at least one desktop/wide screenshot for broad final design QA");
+  if (/\b(dashboard|data-viz|data visualization|chart|table|decision)\b/i.test(briefText)) {
+    const hasFocused = citedScreenshots.some((screenshot) => screenshot.type === "element" || /\b(chart|table|decision|dashboard|viz)\b/i.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`));
+    if (!hasFocused) {
+      warnings.push("design-quality.json dashboard/data-viz work should include a chart, table, or decision-area focused screenshot evidence pointer");
+    }
+  }
+}
+
+async function validateDesignQualityArtifact({ artifact, gate, outDir, screenshots, screenshotNotes, notesPath, notesText, freshness, maxEvidenceAgeMs, briefText }) {
   const data = artifact.data || {};
   const incomplete = [];
   const blockers = [];
@@ -1051,28 +1336,65 @@ async function validateDesignQualityArtifact({ artifact, gate, outDir }) {
     incomplete.push("design-quality.json design_quality_gate.final_required is false; this is not final design acceptance");
   }
 
+  const qaRunId = data.qaRunId || data.qa_run_id;
+  if (!qaRunId) {
+    incomplete.push("design-quality.json qaRunId is required for same-run final acceptance");
+  } else if (freshness?.configuredRunIds?.length === 1 && qaRunId !== freshness.configuredRunIds[0]) {
+    incomplete.push(`design-quality.json qaRunId ${qaRunId} does not match web audit qaRunId ${freshness.configuredRunIds[0]}`);
+  }
+  const generatedAt = Date.parse(data.generatedAt || data.generated_at || "");
+  if (!Number.isFinite(generatedAt)) {
+    incomplete.push("design-quality.json generatedAt is required and must be parseable");
+  } else if (Date.now() - generatedAt > maxEvidenceAgeMs) {
+    incomplete.push("design-quality.json generatedAt is stale; rerun final design-quality review with current screenshots");
+  }
+  const expectedNotesHash = sha256Hex(notesText || "");
+  const notesHash = data.screenshotNotesHash || data.screenshot_notes_hash;
+  if (!notesHash) {
+    incomplete.push("design-quality.json screenshotNotesHash is required");
+  } else if (notesHash !== expectedNotesHash) {
+    incomplete.push("design-quality.json screenshotNotesHash does not match current screenshot-notes.md");
+  }
+  const reviewedScreenshotHashes = data.reviewedScreenshotHashes || data.reviewed_screenshot_hashes || {};
+
   const verdict = data.designQuality || data.design_quality || {};
   if (verdict.required === false) {
     incomplete.push("design-quality.json designQuality.required cannot be false for broad final design QA");
   }
+  const citedEvidence = [];
   for (const field of DESIGN_VERDICT_FIELDS) {
-    const value = String(verdict[field] || "").trim().toLowerCase();
+    const record = verdictRecord(verdict, field);
+    const value = record.verdict;
     if (!value) incomplete.push(`design-quality.json designQuality.${field} is required`);
     else if (value === "fail") blockers.push(`design-quality.json designQuality.${field} is fail`);
     else if (value !== "pass") incomplete.push(`design-quality.json designQuality.${field} must be pass for final acceptance, not ${value}`);
+    citedEvidence.push(...await validateDesignEvidenceReferences({
+      outDir,
+      notesPath,
+      notesText,
+      screenshots,
+      screenshotNotes,
+      reviewedScreenshotHashes,
+      references: record.evidence,
+      label: `design-quality.json designQuality.${field}`,
+      incomplete,
+    }));
   }
-  await validateEvidenceReferences(outDir, verdict.reviewEvidence || verdict.review_evidence, "design-quality.json designQuality.reviewEvidence", incomplete);
+  if (verdict.reviewEvidence || verdict.review_evidence) {
+    incomplete.push("design-quality.json designQuality.reviewEvidence is legacy top-level evidence; provide per-verdict evidence arrays instead");
+  }
+  evidenceCoverageProblems(citedEvidence, screenshots, briefText, incomplete, warnings);
   if (!String(verdict.reviewerNotes || verdict.reviewer_notes || "").trim()) {
     incomplete.push("design-quality.json designQuality.reviewerNotes is required");
   }
 
   const peerSkills = data.peerSkills || data.peer_skills || {};
   for (const name of ["impeccable", "hallmark"]) {
-    const result = peerSkillProblems(name, peerSkills[name] || {});
+    const result = await peerSkillProblems(outDir, name, peerSkills[name] || {});
     incomplete.push(...result.incomplete);
   }
 
-  const referenceResult = referenceDiscoveryProblems(data.referenceDiscovery || data.reference_discovery || {}, { ...gate, depth }, data.deepExploration || data.deep_exploration || {});
+  const referenceResult = await referenceDiscoveryProblems(outDir, data.referenceDiscovery || data.reference_discovery || {}, { ...gate, depth }, data.deepExploration || data.deep_exploration || {});
   incomplete.push(...referenceResult.incomplete);
   warnings.push(...referenceResult.warnings);
 
@@ -1116,7 +1438,8 @@ function extractBriefField(text, field) {
 
 function designQualityGateFor(briefText = "", designQualityData = null) {
   const rawGate = designQualityData?.design_quality_gate || designQualityData?.designQualityGate || null;
-  const heuristicApplies = requiresDesignQualityGate(briefText);
+  const explicitBriefRequired = /\bdesign\s*quality\s*required\s*:\s*true\b/i.test(briefText);
+  const heuristicApplies = explicitBriefRequired || requiresDesignQualityGate(briefText);
   if (rawGate && typeof rawGate.applies === "boolean") {
     return {
       explicit: true,
@@ -1673,6 +1996,13 @@ async function main() {
     artifact: designQualityArtifact,
     gate: designGate,
     outDir,
+    screenshots,
+    screenshotNotes,
+    notesPath,
+    notesText: notesArtifact.text,
+    freshness,
+    maxEvidenceAgeMs,
+    briefText: briefArtifact.text,
   });
   for (const issue of designQuality.incomplete) addIncomplete(issue, "design-quality");
   for (const issue of designQuality.blockers) addBlocker(issue, "design-quality");

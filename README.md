@@ -105,31 +105,36 @@ uses:
 - `deep` is opt-in for larger reference passes, lawful source curation, and
   multiple distinct directions. It is slower and uses more tokens by design.
 
-## AI-Assisted Install
+## How To Install With AI-Assisted Prompts
 
 If you want another coding agent to install it for you, paste one of these.
 
-For Codex with the recommended peer-skill bundle:
+Choose the bundle for the best design critique, because it installs the
+orchestrator plus the recommended peer skills. Choose orchestrator-only for
+offline, corporate-network, or low-dependency environments; broad final design
+QA will then record peer-skill fallbacks instead of pretending those skills ran.
+
+Option 1, Codex with the recommended peer-skill bundle:
 
 ```text
 Install https://github.com/drundoor/design-director-orchestrator plus its recommended peer skills. Clone the repo, run `npm run setup`, run `npm run verify`, run `npm run install:codex:bundle -- --dry-run`, then run `npm run install:codex:bundle`. The bundle installer must check peer-skill licenses and record source metadata; do not vendor third-party skill files into this repo.
 ```
 
-For Codex, orchestrator only:
+Option 2, Codex orchestrator only:
 
 ```text
 Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm run setup`, run `npm run verify`, run `node scripts/install-local.mjs --dry-run --symlink`, then install with `node scripts/install-local.mjs --symlink`. After install, verify that `SKILL.md` is valid and that `npm run verify` passes.
 ```
 
-For Claude or another coding agent:
+Option 3, Claude or another coding agent:
 
 ```text
 Clone https://github.com/drundoor/design-director-orchestrator. Run `npm run setup` and `npm run verify`. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them.
 ```
 
-## Terminal Install
+## More Technical Install Path
 
-For most Codex users, install the full bundle:
+Option 1, full bundle for most Codex users:
 
 ```sh
 git clone https://github.com/drundoor/design-director-orchestrator.git
@@ -147,7 +152,16 @@ vendor those third-party skills into this repository. Use
 `npm run install:codex:bundle -- --peers impeccable` to install only one peer,
 or `--force-peers` to update an existing peer install.
 
-For the orchestrator only:
+Bundle install troubleshooting:
+
+- If `git` is unavailable or GitHub is blocked, use the orchestrator-only path.
+- If a peer repo changes license or structure, the bundle install fails closed.
+- If a peer skill already exists, it is left unchanged unless you pass
+  `--force-peers`.
+- Default peer refs are pinned so repeated installs resolve to the same audited
+  upstream commit or tag.
+
+Option 2, orchestrator only:
 
 ```sh
 node scripts/install-local.mjs --dry-run --symlink

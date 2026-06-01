@@ -263,7 +263,9 @@ stand in for the latter.
 existing screenshots, tokens, or brand system already supply enough source
 truth. Record the local design-system evidence and the taste decision derived
 from it. Do not browse merely to satisfy ceremony when local truth is stronger,
-but do record why local truth is enough.
+but do record why local truth is enough. Local evidence must be a resolvable
+`.design-director` or repo-relative reference, not an absolute path from a
+developer machine.
 
 ## Structured Final Verdict
 
@@ -272,6 +274,13 @@ machine-readable contract that keeps the brief from passing on prose alone:
 
 ```json
 {
+  "qaRunId": "configured-run-id-from-render-dom-visual-artifacts",
+  "generatedAt": "2026-06-01T17:00:00.000Z",
+  "screenshotNotesHash": "sha256-of-current-screenshot-notes-md",
+  "reviewedScreenshotHashes": {
+    "screenshots/default-375x700.png": "sha256-of-current-mobile-screenshot",
+    "screenshots/default-1440x1000.png": "sha256-of-current-desktop-screenshot"
+  },
   "design_quality_gate": {
     "applies": true,
     "reason": "greenfield dashboard",
@@ -280,23 +289,65 @@ machine-readable contract that keeps the brief from passing on prose alone:
   },
   "designQuality": {
     "required": true,
-    "thesisExpressed": "pass",
-    "stylePostureExpressed": "pass",
-    "signatureMoveVisible": "pass",
-    "styleCommitmentHonored": "pass",
-    "genericScaffoldAvoided": "pass",
-    "reviewEvidence": ["screenshot-notes.md#screenshots/default-375x700.png"],
-    "reviewerNotes": "Screenshots show the incident-room posture and signature move."
+    "thesisExpressed": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "stylePostureExpressed": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "signatureMoveVisible": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "styleCommitmentHonored": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "genericScaffoldAvoided": {
+      "verdict": "pass",
+      "evidence": [
+        "screenshot-notes.md#screenshots/default-375x700.png",
+        "screenshot-notes.md#screenshots/default-1440x1000.png"
+      ]
+    },
+    "reviewerNotes": "Current mobile and desktop screenshots show the incident-room posture and signature move."
   },
   "peerSkills": {
     "impeccable": {
       "status": "available",
-      "executionEvidence": "Loaded craft, bolder, layout, and typeset references."
+      "executionEvidence": {
+        "path": "peer-execution.md#impeccable-execution",
+        "commands": ["craft", "bolder", "layout", "typeset"],
+        "summary": "Loaded craft, bolder, layout, and typeset references."
+      }
     },
     "hallmark": {
       "status": "unavailable-fallback-used",
       "fallbackChecklistCompleted": true,
-      "fallbackEvidence": "Anti-slop checklist completed in design-qa.md."
+      "fallbackEvidence": {
+        "path": "peer-fallback.md#hallmark-fallback",
+        "requiredChecks": [
+          "genericScaffold",
+          "decorativePills",
+          "fakeChrome",
+          "stockHero",
+          "weakHierarchy"
+        ]
+      }
     }
   },
   "referenceDiscovery": {
@@ -311,10 +362,18 @@ machine-readable contract that keeps the brief from passing on prose alone:
 ```
 
 All five `designQuality` verdicts must be `pass` for final acceptance. Each
-verdict must reference inspected screenshot notes or screenshot-note sections,
-not a free-floating "looks good" paragraph. Use `applies: false` only for a
-small component repair, deliberately plain utility, or other narrow task, and
-record the reason.
+verdict must carry its own evidence array, every pointer must resolve to a
+current screenshot-note section, and `reviewedScreenshotHashes` must match the
+current screenshot files. Broad final web work needs at least one mobile/narrow
+and one desktop/wide screenshot. Dashboard or data-visualization work should
+also include focused chart, table, or decision-area evidence. Use
+`applies: false` only for a small component repair, deliberately plain utility,
+or other narrow task, and record the reason.
+
+Peer-skill execution evidence must also be structured and resolvable:
+`executionEvidence.path` must point to a markdown section in the QA evidence
+folder that records what was loaded, run, checked, or applied. Plain text like
+`"Loaded Impeccable"` is not final acceptance evidence.
 
 ## Surface Quality Bars
 

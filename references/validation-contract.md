@@ -92,9 +92,10 @@ Use fewer only when the surface clearly does not need them, and record why.
   anti-slop checklist were used.
 - Structured aesthetic verdict for broad final QA: `design-quality.json` must
   mark `thesisExpressed`, `stylePostureExpressed`, `signatureMoveVisible`,
-  `styleCommitmentHonored`, and `genericScaffoldAvoided` as `pass`, with
-  `reviewEvidence` pointing to inspected screenshot notes or screenshot-note
-  sections inside `.design-director`.
+  `styleCommitmentHonored`, and `genericScaffoldAvoided` as `pass`. Each
+  verdict needs its own evidence pointer to a current screenshot-note section,
+  and the artifact must record the same `qaRunId`, current
+  `screenshotNotesHash`, and current `reviewedScreenshotHashes`.
 - Reference discovery evidence for broad design work: the brief, research
   ledger, or QA notes must record which external standards, design systems,
   product/design references, assets, fonts, or motion sources were checked,
@@ -105,10 +106,13 @@ Use fewer only when the surface clearly does not need them, and record why.
   taste/art-direction source when available. Deeper exploration is opt-in.
 - Lean broad design work may also use `local-system-sufficient` when a mature
   local design system, screenshots, tokens, or brand system are stronger than
-  live browsing. Record local design-system evidence and the taste decision.
-- Peer-skill execution evidence: the brief or QA notes must record the
-  Impeccable command references actually loaded/run and the Hallmark review
-  actually loaded/run. Naming a route is not enough.
+  live browsing. Record resolvable local design-system evidence and the taste
+  decision; absolute developer-machine paths are not valid evidence.
+- Peer-skill execution evidence: `design-quality.json` must record structured
+  `executionEvidence` for available Impeccable/Hallmark runs. The evidence must
+  point to a resolvable markdown section in the QA evidence folder and record
+  what was loaded, run, checked, or applied. Naming a route or writing a free
+  text "loaded skill" sentence is not enough.
 - Peer-skill availability evidence: if Impeccable or Hallmark is unavailable,
   `design-quality.json` may record `unavailable-fallback-used` only when the
   built-in fallback checklist is completed. If a peer skill is available but
@@ -139,7 +143,8 @@ Use fewer only when the surface clearly does not need them, and record why.
 - A non-disabled interactive control blends into its surrounding surface so strongly that its affordance depends on hover, focus, or prior knowledge.
 - Screenshots generated but not inspected.
 - `design-quality.json` is missing, has no screenshot-anchored aesthetic
-  verdict, or marks any final broad design verdict as `fail` or `unclear`.
+  verdict, has stale/mismatched run or screenshot hashes, or marks any final
+  broad design verdict as `fail` or `unclear`.
 - Rendered interactive states were not discovered, configured, inspected, or explicitly waived.
 - User-complained component inspected only in full-page context when a focused crop/state was needed.
 - `concept`, `revamp`, or greenfield output has no named design thesis, no named
@@ -165,8 +170,8 @@ A design pass is accepted only when:
    route, Impeccable execution, Hallmark execution, reference discovery plan, and
    anti-generic checks.
 4. `.design-director/design-quality.json` records the applicable gate,
-   screenshot-anchored design verdicts, peer-skill status, and reference
-   discovery outcome for broad final design work.
+   same-run screenshot-anchored design verdicts, peer-skill status, and
+   reference discovery outcome for broad final design work.
 5. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
 6. Implementation changes map back to the brief.
 7. `scripts/discover-states.mjs` was run or explicitly waived with a reason when a rendered web surface exists.

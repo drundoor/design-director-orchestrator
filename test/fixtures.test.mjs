@@ -166,9 +166,15 @@ async function writeInspectedNotes(file, screenshots) {
 async function createQaArtifacts(out, overrides = {}) {
   const screenshot = overrides.screenshot || path.join(out, "screenshots/default-375x700.png");
   const screenshotBytes = overrides.screenshotBytes || pagePng;
+  const desktopScreenshot = overrides.desktopScreenshot || path.join(out, "screenshots/default-1440x1000.png");
+  const desktopBytes = overrides.desktopScreenshotBytes || pngBytes(1440, 1000);
   if (!overrides.skipScreenshotFile) {
     await fs.mkdir(path.dirname(screenshot), { recursive: true });
     await fs.writeFile(screenshot, screenshotBytes);
+    if (overrides.includeDesktop) {
+      await fs.mkdir(path.dirname(desktopScreenshot), { recursive: true });
+      await fs.writeFile(desktopScreenshot, desktopBytes);
+    }
   }
   const state = {
     state: "default",
@@ -183,28 +189,94 @@ async function createQaArtifacts(out, overrides = {}) {
     consoleWarnings: [],
     ...(overrides.state || {}),
   };
+  const states = [state];
+  const screenshots = [screenshot];
+  if (overrides.includeDesktop) {
+    states.push({
+      ...state,
+      state: overrides.desktopStateName || "desktop",
+      viewport: { width: 1440, height: 1000 },
+      screenshot: desktopScreenshot,
+      screenshotMetadata: imageMetadataForBytes(desktopBytes, overrides.desktopScreenshotMetadataOptions || { width: 1440, height: 1000 }),
+      ...(overrides.desktopState || {}),
+    });
+    screenshots.push(desktopScreenshot);
+  }
+  const domStates = states.map((entry) => ({
+    state: entry.state,
+    url: entry.finalUrl || entry.url,
+    finalUrl: entry.finalUrl || entry.url,
+    viewport: entry.viewport,
+    audit: { interactiveControls: [] },
+  }));
+  const visualStates = states.map((entry) => ({
+    state: entry.state,
+    url: entry.finalUrl || entry.url,
+    finalUrl: entry.finalUrl || entry.url,
+    viewport: entry.viewport,
+    audit: { blockers: [], warnings: [] },
+  }));
   await writeJson(path.join(out, "render-results.json"), {
     ...webMeta("render-check"),
-    screenshots: [screenshot],
-    states: [state],
+    screenshots,
+    states,
     ...(overrides.render || {}),
   });
-  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), ...(overrides.dom || { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] }) });
-  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), ...(overrides.visual || { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] }) });
+  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), ...(overrides.dom || { states: domStates }) });
+  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), ...(overrides.visual || { states: visualStates }) });
   if (!overrides.skipDiscovery) {
     await writeJson(path.join(out, "discovered-states.json"), overrides.discovery || discoveryMeta({ candidates: [{ kind: "select" }] }));
   }
   if (!overrides.skipNotes) {
-    await writeInspectedNotes(path.join(out, "screenshot-notes.md"), [{ path: screenshot }]);
+    await writeInspectedNotes(path.join(out, "screenshot-notes.md"), states.map((entry) => ({
+      path: entry.screenshot,
+      viewport: `${entry.viewport.width}x${entry.viewport.height}`,
+      state: entry.state,
+      url: entry.finalUrl || entry.url,
+    })));
   }
   if (!overrides.skipBrief) {
     await fs.writeFile(path.join(out, "design-brief.md"), "Source truth: fixture.\nAnti-goals: none.\nAcceptance: QA evidence passes.\n");
   }
-  return { screenshot };
+  if (!overrides.skipPeerEvidence) {
+    await fs.writeFile(path.join(out, "peer-execution.md"), `# Peer Skill Evidence
+
+## impeccable-execution
+
+- Outcome: Loaded and applied impeccable craft, bolder, layout, and typeset checks.
+- References: Command references checked against the final screenshots.
+- Pass/fail: Pass
+
+## hallmark-execution
+
+- Outcome: Loaded and applied Hallmark anti-slop checks.
+- References: Generic scaffold, decorative pill, fake chrome, and weak hierarchy checks completed.
+- Pass/fail: Pass
+`);
+  }
+  return { screenshot, desktopScreenshot };
 }
 
 async function writeDesignQualityArtifact(out, overrides = {}) {
+  const render = JSON.parse(await fs.readFile(path.join(out, "render-results.json"), "utf8"));
+  const notesText = await fs.readFile(path.join(out, "screenshot-notes.md"), "utf8");
+  const screenshotPaths = (render.states || []).map((state) => path.relative(out, state.screenshot).replaceAll(path.sep, "/"));
+  const evidence = screenshotPaths.map((screenshotPath) => `screenshot-notes.md#${screenshotPath}`);
+  const reviewedScreenshotHashes = {};
+  for (const state of render.states || []) {
+    const screenshotPath = path.relative(out, state.screenshot).replaceAll(path.sep, "/");
+    const bytes = await fs.readFile(state.screenshot);
+    reviewedScreenshotHashes[screenshotPath] = createHash("sha256").update(bytes).digest("hex");
+  }
+  const verdicts = Object.fromEntries(["thesisExpressed", "stylePostureExpressed", "signatureMoveVisible", "styleCommitmentHonored", "genericScaffoldAvoided"].map((field) => [
+    field,
+    { verdict: "pass", evidence },
+  ]));
   await writeJson(path.join(out, "design-quality.json"), {
+    qaRunId: render.qaRunId || "test-run",
+    generatedAt: new Date().toISOString(),
+    screenshotNotesHash: createHash("sha256").update(notesText).digest("hex"),
+    reviewedScreenshotHashes,
     design_quality_gate: {
       applies: true,
       reason: "greenfield dashboard",
@@ -214,23 +286,26 @@ async function writeDesignQualityArtifact(out, overrides = {}) {
     },
     designQuality: {
       required: true,
-      thesisExpressed: "pass",
-      stylePostureExpressed: "pass",
-      signatureMoveVisible: "pass",
-      styleCommitmentHonored: "pass",
-      genericScaffoldAvoided: "pass",
-      reviewEvidence: ["screenshot-notes.md#screenshots/default-375x700.png"],
+      ...verdicts,
       reviewerNotes: "Screenshot notes confirm the incident-room posture, signature move, and non-generic layout.",
       ...(overrides.designQuality || {})
     },
     peerSkills: {
       impeccable: {
         status: "available",
-        executionEvidence: "Loaded impeccable craft, bolder, layout, and typeset command references."
+        executionEvidence: {
+          path: "peer-execution.md#impeccable-execution",
+          commands: ["craft", "bolder", "layout", "typeset"],
+          summary: "Loaded and applied impeccable craft, bolder, layout, and typeset command references."
+        }
       },
       hallmark: {
         status: "available",
-        executionEvidence: "Loaded Hallmark pre-emit critique and checked for generic AI slop."
+        executionEvidence: {
+          path: "peer-execution.md#hallmark-execution",
+          checks: ["genericScaffold", "decorativePills", "fakeChrome", "weakHierarchy"],
+          summary: "Loaded Hallmark pre-emit critique and checked for generic AI slop."
+        }
       },
       ...(overrides.peerSkills || {})
     },
@@ -632,7 +707,7 @@ test("qa-report separates console errors from console warnings", async () => {
 
 test("qa-report --static allows missing state discovery when other evidence is complete", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-static-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await runScript(["scripts/qa-report.mjs", "--out", out, "--static"]);
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.equal(qa.status, "pass");
@@ -643,7 +718,7 @@ test("qa-report --static allows missing state discovery when other evidence is c
 
 test("qa-report requires design quality fields for greenfield concept builds", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-missing-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -681,7 +756,7 @@ Rendered QA must pass.
 
 test("qa-report accepts filled design quality fields for greenfield concept builds", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-filled-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -733,7 +808,7 @@ Rendered QA must pass.
 
 test("qa-report blocks broad final QA without structured design-quality verdict", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-json-missing-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -783,7 +858,7 @@ Rendered QA must pass.
 
 test("qa-report blocks failing structured design-quality verdict", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-fail-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -837,7 +912,25 @@ Rendered QA must pass.
 
 test("qa-report accepts unavailable peer skills only with fallback checklist evidence", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-peer-fallback-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(out, "peer-fallback.md"), `# Peer Fallback Evidence
+
+## impeccable-fallback
+
+- craftCompleteness: checked and passed
+- styleCommitment: checked and passed
+- layoutHierarchy: checked and passed
+- typographyConsistency: checked and passed
+- responsiveAdaptation: checked and passed
+
+## hallmark-fallback
+
+- genericScaffold: checked and rejected
+- decorativePills: checked and none found
+- fakeChrome: checked and none found
+- stockHero: checked and none found
+- weakHierarchy: checked and passed
+`);
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -885,12 +978,18 @@ Rendered QA must pass.
       impeccable: {
         status: "unavailable-fallback-used",
         fallbackChecklistCompleted: true,
-        fallbackEvidence: "Design Quality Gates fallback checklist completed in design-qa.md."
+        fallbackEvidence: {
+          path: "peer-fallback.md#impeccable-fallback",
+          requiredChecks: ["craftCompleteness", "styleCommitment", "layoutHierarchy", "typographyConsistency", "responsiveAdaptation"]
+        }
       },
       hallmark: {
         status: "unavailable-fallback-used",
         fallbackChecklistCompleted: true,
-        fallbackEvidence: "Hallmark anti-slop fallback completed in design-qa.md."
+        fallbackEvidence: {
+          path: "peer-fallback.md#hallmark-fallback",
+          requiredChecks: ["genericScaffold", "decorativePills", "fakeChrome", "stockHero", "weakHierarchy"]
+        }
       }
     }
   });
@@ -901,7 +1000,7 @@ Rendered QA must pass.
 
 test("qa-report rejects skipped available peer skills and allows local-system-sufficient references", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-peer-skipped-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -962,7 +1061,7 @@ Rendered QA must pass.
 
 test("qa-report requires deep exploration accepted/rejected buckets and directions", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-deep-exploration-"));
-  await createQaArtifacts(out, { skipDiscovery: true });
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
   await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
 
 ## Intent
@@ -1022,9 +1121,193 @@ Rendered QA must pass.
   });
   await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("deepExploration.artifact")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("acceptedSources")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("rejectedSources")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("2-3 directions")));
+});
+
+test("qa-report binds design-quality to current run and screenshot notes", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-freshness-"));
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `Source truth: sample.
+Anti-goals: none.
+Acceptance: rendered QA passes.
+Design quality required: true
+Design quality bar:
+- Design thesis: Clear operational surface.
+- Primary workflow: Decide next action.
+- Style posture: Incident room.
+- Why this posture fits: The task needs urgency.
+- Surface quality bar: Dashboard.
+- Design exploration depth: Lean.
+- Visual signature: Risk rail.
+- Signature move: Risk rail.
+- Style commitment: Incident room.
+- First-viewport consequence: Risk appears first.
+- Layout consequence: Decision board.
+- Typography consequence: Consistent roles.
+- Color/material consequence: Severity only.
+- Generic pattern rejected: Generic cards.
+- Composition proof: Mobile and desktop screenshots.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable.
+- Reference discovery plan: Check correctness, domain, and taste.
+- Anti-generic checks: Reject generic cards.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+`);
+  await writeDesignQualityArtifact(out, {
+    extra: {
+      qaRunId: "wrong-run",
+      generatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      screenshotNotesHash: "wrong-hash"
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("qaRunId wrong-run")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("generatedAt is stale")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("screenshotNotesHash does not match")));
+});
+
+test("qa-report requires per-verdict design-quality evidence and screenshot hashes", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-evidence-"));
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `Source truth: sample.
+Anti-goals: none.
+Acceptance: rendered QA passes.
+Design quality required: true
+Design quality bar:
+- Design thesis: Clear operational surface.
+- Primary workflow: Decide next action.
+- Style posture: Incident room.
+- Why this posture fits: The task needs urgency.
+- Surface quality bar: Dashboard.
+- Design exploration depth: Lean.
+- Visual signature: Risk rail.
+- Signature move: Risk rail.
+- Style commitment: Incident room.
+- First-viewport consequence: Risk appears first.
+- Layout consequence: Decision board.
+- Typography consequence: Consistent roles.
+- Color/material consequence: Severity only.
+- Generic pattern rejected: Generic cards.
+- Composition proof: Mobile and desktop screenshots.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable.
+- Reference discovery plan: Check correctness, domain, and taste.
+- Anti-generic checks: Reject generic cards.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+`);
+  await writeDesignQualityArtifact(out, {
+    designQuality: {
+      thesisExpressed: { verdict: "pass", evidence: [] },
+      reviewEvidence: ["screenshot-notes.md#screenshots/default-375x700.png"]
+    },
+    extra: {
+      reviewedScreenshotHashes: {
+        "screenshots/default-375x700.png": "wrong-hash"
+      }
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("thesisExpressed") && issue.includes("per-verdict")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("reviewEvidence is legacy")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("reviewedScreenshotHashes") && issue.includes("does not match")));
+});
+
+test("qa-report requires broad design evidence to include mobile and desktop screenshots", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-responsive-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `Source truth: sample.
+Anti-goals: none.
+Acceptance: rendered QA passes.
+Design quality required: true
+Design quality bar:
+- Design thesis: Clear operational surface.
+- Primary workflow: Decide next action.
+- Style posture: Incident room.
+- Why this posture fits: The task needs urgency.
+- Surface quality bar: Dashboard.
+- Design exploration depth: Lean.
+- Visual signature: Risk rail.
+- Signature move: Risk rail.
+- Style commitment: Incident room.
+- First-viewport consequence: Risk appears first.
+- Layout consequence: Decision board.
+- Typography consequence: Consistent roles.
+- Color/material consequence: Severity only.
+- Generic pattern rejected: Generic cards.
+- Composition proof: Mobile and desktop screenshots.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable.
+- Reference discovery plan: Check correctness, domain, and taste.
+- Anti-generic checks: Reject generic cards.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+`);
+  await writeDesignQualityArtifact(out);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("desktop/wide screenshot")));
+});
+
+test("qa-report rejects string-only peer fallback and absolute local-system evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-peer-local-"));
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `Source truth: sample.
+Anti-goals: none.
+Acceptance: rendered QA passes.
+Design quality required: true
+Design quality bar:
+- Design thesis: Clear operational surface.
+- Primary workflow: Decide next action.
+- Style posture: Incident room.
+- Why this posture fits: The task needs urgency.
+- Surface quality bar: Dashboard.
+- Design exploration depth: Lean.
+- Visual signature: Risk rail.
+- Signature move: Risk rail.
+- Style commitment: Incident room.
+- First-viewport consequence: Risk appears first.
+- Layout consequence: Decision board.
+- Typography consequence: Consistent roles.
+- Color/material consequence: Severity only.
+- Generic pattern rejected: Generic cards.
+- Composition proof: Mobile and desktop screenshots.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Impeccable unavailable; fallback checklist completed.
+- Reference discovery plan: Local system is sufficient.
+- Anti-generic checks: Reject generic cards.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+`);
+  await writeDesignQualityArtifact(out, {
+    peerSkills: {
+      impeccable: {
+        status: "unavailable-fallback-used",
+        fallbackChecklistCompleted: true,
+        fallbackEvidence: "Fallback checklist completed."
+      },
+      hallmark: {
+        status: "available",
+        executionEvidence: "Loaded Hallmark."
+      }
+    },
+    referenceDiscovery: {
+      outcome: "local-system-sufficient",
+      localDesignSystemEvidence: "/Users/alice/project/tokens.css",
+      tasteDecision: "Use local density tokens."
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("fallbackEvidence must be an object")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("executionEvidence must be an object")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("localDesignSystemEvidence") && issue.includes("absolute paths")));
 });
 
 test("qa-report requires triggered secondary Impeccable commands for dashboards", async () => {
@@ -2040,10 +2323,12 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(readme.includes("npm run install:codex:bundle"));
   assert.ok(readme.includes("fetches allowlisted peer skills"));
   assert.ok(readme.includes("design-quality.json"));
-  assert.ok(readme.includes("## AI-Assisted Install"));
-  assert.ok(readme.includes("## Terminal Install"));
-  assert.ok(readme.indexOf("## Ask It Like This") < readme.indexOf("## AI-Assisted Install"));
-  assert.ok(readme.indexOf("## AI-Assisted Install") < readme.indexOf("## Terminal Install"));
+  assert.ok(readme.includes("## How To Install With AI-Assisted Prompts"));
+  assert.ok(readme.includes("## More Technical Install Path"));
+  assert.ok(readme.indexOf("## Ask It Like This") < readme.indexOf("## How To Install With AI-Assisted Prompts"));
+  assert.ok(readme.indexOf("## How To Install With AI-Assisted Prompts") < readme.indexOf("## More Technical Install Path"));
+  assert.ok(readme.indexOf("Option 1, Codex with the recommended peer-skill bundle") < readme.indexOf("Option 2, Codex orchestrator only"));
+  assert.ok(readme.indexOf("Option 1, full bundle for most Codex users") < readme.indexOf("Option 2, orchestrator only"));
   for (const scriptName of ["setup", "verify", "qa:web", "qa:web:draft", "qa:web:ci", "qa:web:final", "qa:native:ios", "qa:native:android", "brief:new", "research:ledger", "install:codex:bundle"]) {
     assert.ok(pkg.scripts[scriptName], `package script missing: ${scriptName}`);
   }
@@ -2136,6 +2421,12 @@ test("bundle installer manifest and dry-run expose optional peer skill bundle", 
   assert.equal(manifest.peers.hallmark.expectedLicenses.includes("MIT"), true);
   assert.equal(manifest.peers.impeccable.skillPath, "plugin/skills/impeccable");
   assert.equal(manifest.peers.hallmark.skillPath, "skills/hallmark");
+  for (const peerName of manifest.defaultPeers) {
+    const peer = manifest.peers[peerName];
+    assert.ok(peer.expectedSkillEntrypoint, `${peerName} must declare an expected skill entrypoint`);
+    assert.notEqual(peer.ref, "main", `${peerName} default bundle ref must be pinned, not main`);
+    assert.equal(peer.floatingRef === true, false, `${peerName} default bundle cannot use a floating ref`);
+  }
   const { stdout } = await runScript(["scripts/install-bundle.mjs", "--dry-run", "--peers", "impeccable"]);
   assert.match(stdout, /peer impeccable/);
   assert.match(stdout, /expected license: Apache-2\.0/);

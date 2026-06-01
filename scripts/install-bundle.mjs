@@ -81,6 +81,10 @@ function detectLicenseFromText(text) {
   return null;
 }
 
+function commitRef(ref) {
+  return /^[a-f0-9]{40}$/i.test(String(ref || ""));
+}
+
 async function detectLicense(cloneDir, peer) {
   const candidates = [];
   for (const file of peer.licenseFiles || []) {
@@ -144,9 +148,12 @@ async function installPeer(peerName, peer, args, targetRoot, tempRoot) {
 
   const cloneDir = path.join(tempRoot, peerName);
   const cloneArgs = ["clone", "--depth", "1"];
-  if (peer.ref) cloneArgs.push("--branch", peer.ref);
+  if (peer.ref && !commitRef(peer.ref)) cloneArgs.push("--branch", peer.ref);
   cloneArgs.push(peer.repo, cloneDir);
   await run("git", cloneArgs, { timeout: 180000 });
+  if (peer.ref && commitRef(peer.ref)) {
+    await run("git", ["checkout", "--detach", peer.ref], { cwd: cloneDir });
+  }
 
   const license = await detectLicense(cloneDir, peer);
   if (!license.accepted) {
@@ -156,8 +163,9 @@ async function installPeer(peerName, peer, args, targetRoot, tempRoot) {
 
   const commit = await run("git", ["rev-parse", "HEAD"], { cwd: cloneDir });
   const sourceSkill = path.join(cloneDir, peer.skillPath);
-  if (!(await exists(path.join(sourceSkill, "SKILL.md")))) {
-    throw new Error(`Peer skill ${peerName} is missing SKILL.md at ${peer.skillPath}`);
+  const entrypoint = peer.expectedSkillEntrypoint || "SKILL.md";
+  if (!(await exists(path.join(sourceSkill, entrypoint)))) {
+    throw new Error(`Peer skill ${peerName} is missing ${entrypoint} at ${peer.skillPath}`);
   }
   await fs.mkdir(path.dirname(target), { recursive: true });
   await copySkillFolder(sourceSkill, target);
@@ -177,6 +185,7 @@ async function installPeer(peerName, peer, args, targetRoot, tempRoot) {
     ref: peer.ref,
     commit,
     skillPath: peer.skillPath,
+    expectedSkillEntrypoint: entrypoint,
     license: license.accepted.license,
     licenseSource: license.accepted.source,
     role: peer.role,

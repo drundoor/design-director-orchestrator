@@ -22,7 +22,9 @@ This is not legal advice, and the installer intentionally fails closed if an
 upstream license is missing or no longer matches the allowlist. The default peer
 bundle currently includes `impeccable` and `hallmark`; users can install fewer
 peers with `--peers impeccable` or skip the orchestrator itself with
-`--no-design-director`.
+`--no-design-director`. Default peer refs are pinned to audited tags or commits;
+future floating refs must be explicitly marked and should not be part of the
+default bundle without a separate warning.
 
 ## License Review Result
 
