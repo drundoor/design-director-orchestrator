@@ -2716,11 +2716,11 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(readme.includes("design-quality.json"));
   assert.ok(readme.includes("### Directs The Work"));
   assert.ok(readme.includes("### Verifies Real UI States"));
-  assert.ok(readme.includes("## How To Prompt The Skill"));
+  assert.ok(readme.includes("## Prompt With Plain Language Or Specific Skills"));
   assert.ok(readme.includes("Platform examples:"));
   assert.ok(readme.includes("## How To Install With AI-Assisted Prompts"));
   assert.ok(readme.includes("## More Technical Install Path"));
-  assert.ok(readme.indexOf("## How To Prompt The Skill") < readme.indexOf("## How To Install With AI-Assisted Prompts"));
+  assert.ok(readme.indexOf("## Prompt With Plain Language Or Specific Skills") < readme.indexOf("## How To Install With AI-Assisted Prompts"));
   assert.ok(readme.indexOf("## How To Install With AI-Assisted Prompts") < readme.indexOf("## More Technical Install Path"));
   assert.ok(readme.indexOf("Option 1, Codex with the recommended peer-skill bundle") < readme.indexOf("Option 2, Codex orchestrator only"));
   assert.ok(readme.indexOf("Option 1, full bundle for most Codex users") < readme.indexOf("Option 2, orchestrator only"));

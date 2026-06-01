@@ -25,13 +25,13 @@ It is for work where "functional but bland" is not good enough.
 - Requires a style posture, signature move, first-viewport consequence, and
   rejected generic pattern before broad implementation starts.
 
-### Uses References Lawfully
+### Builds From References
 
 - Runs lean design-element exploration by default: one correctness source, one
   domain source, and one taste/art-direction source.
-- Records license, allowed use, and do-not-copy notes before any outside
-  reference shapes the implementation. Larger source-curation passes are opt-in
-  with `deep design exploration`.
+- Captures what to learn from each reference and what not to copy before outside
+  inspiration shapes the implementation. Larger source-curation passes are
+  opt-in with `deep design exploration`.
 
 ### Verifies Real UI States
 
@@ -43,7 +43,7 @@ It is for work where "functional but bland" is not good enough.
 For a tiny CSS fix, use the normal coding flow. For anything visual that can
 break across states, screens, or platforms, use this.
 
-## How To Prompt The Skill
+## Prompt With Plain Language Or Specific Skills
 
 Plain language is enough:
 
@@ -99,7 +99,7 @@ uses:
 - `lean` is the default. It uses 2-3 high-signal design-element references and
   one compact style commitment before building.
 - `standard` is for requested inspiration or a couple of lightweight directions.
-- `deep` is opt-in for larger reference passes, lawful source curation, and
+- `deep` is opt-in for larger reference passes, source curation, and
   multiple distinct directions. It is slower and uses more tokens by design.
 
 ## How To Install With AI-Assisted Prompts
