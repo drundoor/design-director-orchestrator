@@ -83,7 +83,9 @@ Use fewer only when the surface clearly does not need them, and record why.
 - Focused chart, table, or decision-area screenshots for clear dashboard,
   data-visualization, analytics, report, chart, or table surfaces. This is
   required final evidence, not a warning, when the surface is clearly data
-  heavy.
+  heavy. The focused screenshot must identify the relevant chart, table, grid,
+  visualization, metric, KPI, report, or decision area through
+  `focusedEvidenceKind` metadata or a meaningful selector/path.
 - State discovery output or a recorded waiver. For rendered web targets, run `scripts/discover-states.mjs` before final QA unless the page is static or the user explicitly limited scope. Discovery must be fresh, share the configured run identity, and include `discoveryHash`. Use `qa-report.mjs --static` only when the page has no relevant interactive states; use `--partial` only for draft reports, never acceptance.
 - State coverage dispositions for discovered but unrendered candidates. Non-rendered dispositions require a reason; `waived`, `duplicate`, and `low-value` also require evidence. High-confidence safe candidates rejected as `not-relevant` also require evidence inside `.design-director`; only destructive or sensitive rejections may be evidence-free, and they still need a reason. The state-coverage file must be fresh and bind to the current discovery via `discoveryHash` or same-run metadata.
 - Visual consistency audit for repeated components: peer typography, slot alignment, local spacing rhythm, media/title anchoring, attached-control width, and affordance clarity.

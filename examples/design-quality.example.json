@@ -7,6 +7,9 @@
     "screenshots/default-1440x1000.png": "sha256-of-current-desktop-screenshot",
     "screenshots/primary-chart-375x220.png": "sha256-of-current-focused-chart-screenshot"
   },
+  "focusedEvidenceKinds": {
+    "screenshots/primary-chart-375x220.png": "chart"
+  },
   "design_quality_gate": {
     "applies": true,
     "reason": "greenfield dashboard",

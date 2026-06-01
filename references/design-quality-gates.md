@@ -376,7 +376,10 @@ current screenshot files. `generatedAt` must be current, parseable, and not in
 the future beyond normal clock skew. Broad final web work needs at least one
 mobile/narrow and one desktop/wide screenshot. Dashboard, report, table, chart,
 analytics, and data-visualization work must also include focused chart, table,
-or decision-area evidence. Use
+grid, visualization, metric, KPI, report, or decision-area evidence. A generic
+element crop is not enough: the action artifact or `design-quality.json` should
+record `focusedEvidenceKind`, or the selector/path must clearly identify the
+chart, table, grid, visualization, metric, KPI, report, or decision area. Use
 `applies: false` only for a small component repair, deliberately plain utility,
 or other narrow task, and record the reason.
 
@@ -388,8 +391,9 @@ utility, and include a reason.
 Peer-skill execution evidence must also be structured and resolvable:
 `executionEvidence.path` must point to a markdown section in the QA evidence
 folder that records what was loaded, run, checked, or applied for each listed
-command or check. Plain text like `"Loaded Impeccable"` is not final acceptance
-evidence.
+command or check. Negative or pending wording such as "not run", "skipped", or
+"pending" near a required command/check is not acceptance evidence. Plain text
+like `"Loaded Impeccable"` is not final acceptance evidence.
 
 ## Surface Quality Bars
 

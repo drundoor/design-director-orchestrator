@@ -15,6 +15,23 @@ const REQUIRED_NOTE_FIELDS = [
   "Waiver/evidence",
 ];
 const MAX_CLOCK_SKEW_MS = 2 * 60 * 1000;
+const NEGATIVE_PEER_OUTCOME_PATTERN = /\b(not run|not loaded|skipped|pending|todo|not checked|missing|unavailable)\b/i;
+const PEER_OUTCOME_PATTERN = /\b(pass|passed|check|checks|checked|complete|completed|loaded|run|ran|used|applied|reviewed|executed|n\/a|not applicable)\b/i;
+const FOCUSED_EVIDENCE_PATTERN = /\b(chart|table|grid|viz|visualization|decision|metric|kpi|report)\b/i;
+const FOCUSED_EVIDENCE_KINDS = new Set([
+  "chart",
+  "table",
+  "grid",
+  "viz",
+  "visualization",
+  "data-viz",
+  "data-visualization",
+  "decision",
+  "decision-area",
+  "metric",
+  "kpi",
+  "report",
+]);
 
 function parseArgs(argv) {
   const args = { out: ".design-director" };
@@ -24,6 +41,8 @@ function parseArgs(argv) {
       args.help = true;
     } else if (arg === "--out") {
       args.out = argv[++i];
+    } else if (arg === "--repo-root") {
+      args.repoRoot = argv[++i];
     } else if (arg === "--notes") {
       args.notes = argv[++i];
     } else if (arg === "--waivers") {
@@ -54,7 +73,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--brief .design-director/design-brief.md] [--evidence-only|--no-brief] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero] [--allow-mixed-evidence] [--max-evidence-age-ms 1800000]
+  return `Usage: qa-report.mjs [--out .design-director] [--repo-root <project-root>] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--brief .design-director/design-brief.md] [--evidence-only|--no-brief] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero] [--allow-mixed-evidence] [--max-evidence-age-ms 1800000]
 
 Merges render-results.json, dom-audit.json, and visual-consistency-audit.json
 into design-qa.json and design-qa.md. Missing evidence is incomplete/failing by
@@ -206,6 +225,45 @@ function duplicateStateKeys(states = []) {
         screenshot: state.screenshot || null,
       })),
     }));
+}
+
+function outcomeWindowForItem(sectionText, item) {
+  const spaced = item.replace(/([a-z])([A-Z])/g, "$1 $2");
+  const singular = item.endsWith("s") ? item.slice(0, -1) : item;
+  const spacedSingular = singular.replace(/([a-z])([A-Z])/g, "$1 $2");
+  const aliases = [...new Set([item, spaced, singular, spacedSingular])]
+    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"));
+  const pattern = new RegExp(`(?:${aliases.join("|")})[\\s\\S]{0,160}${PEER_OUTCOME_PATTERN.source}`, "i");
+  return sectionText.match(pattern)?.[0] || "";
+}
+
+function normalizedFocusedEvidenceKind(value) {
+  return String(value || "").trim().toLowerCase().replaceAll("_", "-");
+}
+
+function focusedKindFromDesignQuality(data = {}, screenshot = {}, outDir = process.cwd()) {
+  const focused = data.focusedEvidence || data.focused_evidence || data.focusedEvidenceKinds || data.focused_evidence_kinds || null;
+  if (!focused) return "";
+  if (Array.isArray(focused)) {
+    const record = focused.find((item) => item && typeof item === "object" && artifactPath(outDir, item.path || "") === screenshot.path);
+    return record?.focusedEvidenceKind || record?.focused_evidence_kind || record?.kind || record?.evidenceKind || record?.evidence_kind || "";
+  }
+  if (typeof focused === "object") {
+    const direct = focused[screenshot.path];
+    if (typeof direct === "string") return direct;
+    if (direct && typeof direct === "object") {
+      return direct.focusedEvidenceKind || direct.focused_evidence_kind || direct.kind || direct.evidenceKind || direct.evidence_kind || "";
+    }
+    for (const [key, value] of Object.entries(focused)) {
+      if (artifactPath(outDir, key) === screenshot.path) {
+        if (typeof value === "string") return value;
+        if (value && typeof value === "object") {
+          return value.focusedEvidenceKind || value.focused_evidence_kind || value.kind || value.evidenceKind || value.evidence_kind || "";
+        }
+      }
+    }
+  }
+  return "";
 }
 
 async function inspectScreenshot(file, outDir) {
@@ -378,6 +436,7 @@ function loadScreenshots(render, outDir) {
           path: artifactPath(outDir, artifact.path),
           type: "element",
           selector: artifact.selector,
+          focusedEvidenceKind: artifact.focusedEvidenceKind || artifact.focused_evidence_kind || artifact.evidenceKind || artifact.evidence_kind || null,
           state: state.state || "unknown",
           viewport: artifact.viewport || state.viewport || null,
           url: state.finalUrl || state.url || "unknown",
@@ -1117,13 +1176,11 @@ async function peerExecutionEvidenceProblems(outDir, name, peerSkill = {}) {
   }
   const expectedOutcomes = [...commands, ...checks].map((item) => String(item || "").trim()).filter(Boolean);
   for (const item of expectedOutcomes) {
-    const spaced = item.replace(/([a-z])([A-Z])/g, "$1 $2");
-    const singular = item.endsWith("s") ? item.slice(0, -1) : item;
-    const spacedSingular = singular.replace(/([a-z])([A-Z])/g, "$1 $2");
-    const aliases = [...new Set([item, spaced, singular, spacedSingular])].map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"));
-    const pattern = new RegExp(`(?:${aliases.join("|")})[\\s\\S]{0,160}\\b(pass|passed|check|checks|checked|complete|completed|loaded|run|ran|used|applied|reviewed|executed|n/a|not applicable)\\b`, "i");
-    if (!pattern.test(sectionText)) {
+    const window = outcomeWindowForItem(sectionText, item);
+    if (!window) {
       incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence section must record a filled outcome for ${item}`);
+    } else if (NEGATIVE_PEER_OUTCOME_PATTERN.test(window)) {
+      incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence section contains negative or pending wording for ${item}`);
     }
   }
   return incomplete;
@@ -1164,7 +1221,7 @@ async function peerSkillProblems(outDir, name, peerSkill = {}) {
   return { normalized, incomplete };
 }
 
-async function validateLocalEvidence(outDir, references, label, incomplete) {
+async function validateLocalEvidence(outDir, references, label, incomplete, projectRoot = process.cwd()) {
   const entries = asArray(references).map((item) => typeof item === "string" ? item : (item.path || item.source || "")).filter(Boolean);
   if (!entries.length) {
     incomplete.push(`${label} is required`);
@@ -1184,12 +1241,11 @@ async function validateLocalEvidence(outDir, references, label, incomplete) {
       incomplete.push(`${label} must not use parent-directory traversal: ${entry}`);
       continue;
     }
-    if (evidencePathInside(outDir, parsed.file)) {
-      if (!(await pathExists(resolveEvidencePath(outDir, parsed.file)))) incomplete.push(`${label} evidence path does not exist: ${entry}`);
+    if (evidencePathInside(outDir, parsed.file) && (await pathExists(resolveEvidencePath(outDir, parsed.file)))) {
       continue;
     }
-    const repoRelative = path.resolve(parsed.file);
-    const repoRoot = process.cwd();
+    const repoRoot = path.resolve(projectRoot || process.cwd());
+    const repoRelative = path.resolve(repoRoot, parsed.file);
     const relative = path.relative(repoRoot, repoRelative);
     if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
       incomplete.push(`${label} evidence must stay inside the repository root: ${entry}`);
@@ -1199,7 +1255,7 @@ async function validateLocalEvidence(outDir, references, label, incomplete) {
   }
 }
 
-async function referenceDiscoveryProblems(outDir, referenceDiscovery = {}, gate = {}, deepExploration = {}) {
+async function referenceDiscoveryProblems(outDir, referenceDiscovery = {}, gate = {}, deepExploration = {}, projectRoot = process.cwd()) {
   const incomplete = [];
   const warnings = [];
   const outcome = referenceDiscovery.outcome || referenceDiscovery.status || "";
@@ -1218,7 +1274,7 @@ async function referenceDiscoveryProblems(outDir, referenceDiscovery = {}, gate 
     }
   }
   if (outcome === "local-system-sufficient") {
-    await validateLocalEvidence(outDir, referenceDiscovery.localDesignSystemEvidence || referenceDiscovery.local_design_system_evidence, "design-quality.json referenceDiscovery.localDesignSystemEvidence", incomplete);
+    await validateLocalEvidence(outDir, referenceDiscovery.localDesignSystemEvidence || referenceDiscovery.local_design_system_evidence, "design-quality.json referenceDiscovery.localDesignSystemEvidence", incomplete, projectRoot);
     if (!String(referenceDiscovery.tasteDecision || referenceDiscovery.taste_decision || "").trim()) {
       incomplete.push("design-quality.json referenceDiscovery.tasteDecision is required for local-system-sufficient");
     }
@@ -1351,7 +1407,7 @@ async function validateDesignEvidenceReferences({
   return cited;
 }
 
-function evidenceCoverageProblems(citedPaths, screenshots, briefText, surfaceText, incomplete, warnings) {
+function evidenceCoverageProblems(citedPaths, screenshots, briefText, surfaceText, incomplete, warnings, designQualityData = {}, outDir = process.cwd()) {
   const cited = new Set(citedPaths);
   const citedScreenshots = screenshots.filter((screenshot) => cited.has(screenshot.path));
   const hasMobile = citedScreenshots.some((screenshot) => Number(screenshot.viewport?.width || 0) && Number(screenshot.viewport.width) <= 700);
@@ -1360,17 +1416,25 @@ function evidenceCoverageProblems(citedPaths, screenshots, briefText, surfaceTex
   if (!hasDesktop) incomplete.push("design-quality.json evidence must include at least one desktop/wide screenshot for broad final design QA");
   const evidenceContext = `${briefText || ""} ${surfaceText || ""}`;
   if (/\b(dashboard|data-viz|data visualization|chart|table|analytics|report)\b/i.test(evidenceContext)) {
-    const hasFocused = citedScreenshots.some((screenshot) => screenshot.type === "element" || /\b(chart|table|decision|dashboard|viz)\b/i.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`));
+    const hasFocused = citedScreenshots.some((screenshot) => {
+      const kind = normalizedFocusedEvidenceKind(screenshot.focusedEvidenceKind || focusedKindFromDesignQuality(designQualityData, screenshot, outDir));
+      const explicitKind = kind && FOCUSED_EVIDENCE_KINDS.has(kind);
+      const meaningfulTarget = FOCUSED_EVIDENCE_PATTERN.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`);
+      return explicitKind || meaningfulTarget;
+    });
     if (!hasFocused) {
-      incomplete.push("design-quality.json dashboard/data-viz work must include a chart, table, or decision-area focused screenshot evidence pointer");
+      incomplete.push("design-quality.json dashboard/data-viz work must include a chart, table, grid, visualization, metric, KPI, report, or decision-area focused screenshot evidence pointer");
     }
   } else if (/\bdecision\b/i.test(evidenceContext)) {
-    const hasFocused = citedScreenshots.some((screenshot) => screenshot.type === "element" || /\b(decision|chart|table|dashboard|viz)\b/i.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`));
+    const hasFocused = citedScreenshots.some((screenshot) => {
+      const kind = normalizedFocusedEvidenceKind(screenshot.focusedEvidenceKind || focusedKindFromDesignQuality(designQualityData, screenshot, outDir));
+      return FOCUSED_EVIDENCE_KINDS.has(kind) || FOCUSED_EVIDENCE_PATTERN.test(`${screenshot.path} ${screenshot.state} ${screenshot.selector || ""}`);
+    });
     if (!hasFocused) warnings.push("design-quality.json decision-heavy work should include a focused screenshot evidence pointer when a specific decision area exists");
   }
 }
 
-async function validateDesignQualityArtifact({ artifact, gate, outDir, screenshots, screenshotNotes, notesPath, notesText, freshness, maxEvidenceAgeMs, briefText, surfaceText }) {
+async function validateDesignQualityArtifact({ artifact, gate, outDir, screenshots, screenshotNotes, notesPath, notesText, freshness, maxEvidenceAgeMs, briefText, surfaceText, projectRoot }) {
   const data = artifact.data || {};
   const incomplete = [];
   const blockers = [];
@@ -1448,7 +1512,7 @@ async function validateDesignQualityArtifact({ artifact, gate, outDir, screensho
   if (verdict.reviewEvidence || verdict.review_evidence) {
     incomplete.push("design-quality.json designQuality.reviewEvidence is legacy top-level evidence; provide per-verdict evidence arrays instead");
   }
-  evidenceCoverageProblems(citedEvidence, screenshots, briefText, surfaceText, incomplete, warnings);
+  evidenceCoverageProblems(citedEvidence, screenshots, briefText, surfaceText, incomplete, warnings, data, outDir);
   if (!String(verdict.reviewerNotes || verdict.reviewer_notes || "").trim()) {
     incomplete.push("design-quality.json designQuality.reviewerNotes is required");
   }
@@ -1459,7 +1523,7 @@ async function validateDesignQualityArtifact({ artifact, gate, outDir, screensho
     incomplete.push(...result.incomplete);
   }
 
-  const referenceResult = await referenceDiscoveryProblems(outDir, data.referenceDiscovery || data.reference_discovery || {}, { ...gate, depth }, data.deepExploration || data.deep_exploration || {});
+  const referenceResult = await referenceDiscoveryProblems(outDir, data.referenceDiscovery || data.reference_discovery || {}, { ...gate, depth }, data.deepExploration || data.deep_exploration || {}, projectRoot);
   incomplete.push(...referenceResult.incomplete);
   warnings.push(...referenceResult.warnings);
 
@@ -1724,6 +1788,7 @@ async function main() {
   const maxEvidenceAgeMs = Number.isFinite(args.maxEvidenceAgeMs) ? args.maxEvidenceAgeMs : 30 * 60 * 1000;
 
   const outDir = path.resolve(args.out);
+  const projectRoot = path.resolve(args.repoRoot || process.env.DESIGN_DIRECTOR_PROJECT_ROOT || process.cwd());
   await fs.mkdir(outDir, { recursive: true });
 
   const renderArtifact = await readJsonArtifact(path.join(outDir, "render-results.json"));
@@ -2087,6 +2152,7 @@ async function main() {
     maxEvidenceAgeMs,
     briefText: briefArtifact.text,
     surfaceText: `${render.platform || ""} ${render.surface || ""} ${render.qaProfile || ""}`,
+    projectRoot,
   });
   for (const issue of designQuality.incomplete) addIncomplete(issue, "design-quality");
   for (const issue of designQuality.blockers) addBlocker(issue, "design-quality");

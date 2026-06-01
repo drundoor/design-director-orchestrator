@@ -65,6 +65,9 @@ You can also name the flow directly:
 
 The intent is separate from the platform. Say `repair + native-ios`,
 `qa + native-android`, `create + dashboard`, or `revamp + marketing-web`.
+Platform examples: "Audit this Android Compose screen with IME states,"
+"Redesign this iPhone screen with Dynamic Type," "Improve this game/canvas UI,"
+or "Use these screenshots as inspiration without copying assets."
 
 | User asks | Default path | Weight |
 | --- | --- | --- |

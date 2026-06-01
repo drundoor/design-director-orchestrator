@@ -163,6 +163,7 @@ export async function runActions(page, actions = [], options = {}) {
         path: artifactPath,
         screenshotMetadata: await imageMetadataForFile(file),
         selector: action.selector,
+        focusedEvidenceKind: action.focusedEvidenceKind || action.focused_evidence_kind || action.evidenceKind || action.evidence_kind || null,
         actionIndex,
         viewport: options.viewport || null,
         action,

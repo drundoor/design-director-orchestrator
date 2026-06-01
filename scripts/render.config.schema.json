@@ -151,6 +151,12 @@
         "ms": { "type": "number", "minimum": 0 },
         "waitMs": { "type": "number", "minimum": 0 },
         "timeout": { "type": "number", "minimum": 0 },
+        "focusedEvidenceKind": {
+          "enum": ["chart", "table", "grid", "viz", "visualization", "data-viz", "data-visualization", "decision", "decision-area", "metric", "kpi", "report"]
+        },
+        "evidenceKind": {
+          "enum": ["chart", "table", "grid", "viz", "visualization", "data-viz", "data-visualization", "decision", "decision-area", "metric", "kpi", "report"]
+        },
         "state": { "enum": ["attached", "detached", "visible", "hidden"] },
         "name": { "type": "string" },
         "x": { "type": "number" },

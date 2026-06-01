@@ -103,10 +103,16 @@ async function main() {
   if (args.final && args.ci) throw new Error("--final and --ci are separate modes; use one");
 
   const outDir = path.resolve(args.out);
+  const projectRoot = path.resolve(process.cwd());
   await fs.mkdir(outDir, { recursive: true });
   const qaRunId = args.qaRunId || process.env.DESIGN_DIRECTOR_QA_RUN_ID || `qa-${Date.now().toString(36)}`;
   const appBuildId = args.appBuildId || process.env.DESIGN_DIRECTOR_APP_BUILD_ID || `build-${Date.now().toString(36)}`;
-  const env = { ...process.env, DESIGN_DIRECTOR_QA_RUN_ID: qaRunId, DESIGN_DIRECTOR_APP_BUILD_ID: appBuildId };
+  const env = {
+    ...process.env,
+    DESIGN_DIRECTOR_PROJECT_ROOT: projectRoot,
+    DESIGN_DIRECTOR_QA_RUN_ID: qaRunId,
+    DESIGN_DIRECTOR_APP_BUILD_ID: appBuildId,
+  };
   let configPath = args.config ? path.resolve(args.config) : path.join(outDir, "render.config.json");
   if (!args.config) await writeConfigFromUrl(configPath, args, qaRunId, appBuildId);
 
@@ -128,7 +134,7 @@ async function main() {
   await runStep("DOM audit", ["scripts/dom-audit.mjs", "--config", configPath, "--out", outDir, "--timeout", args.timeout], env, { allowFailure: true });
   await runStep("visual audit", ["scripts/visual-consistency-audit.mjs", "--config", configPath, "--out", outDir, "--timeout", args.timeout], env, { allowFailure: true });
 
-  const reportArgs = ["scripts/qa-report.mjs", "--out", outDir, "--init-notes"];
+  const reportArgs = ["scripts/qa-report.mjs", "--out", outDir, "--repo-root", projectRoot, "--init-notes"];
   if (args.static) reportArgs.push("--static");
   if (!finalLike) reportArgs.push("--partial", "--allow-partial-exit-zero");
   const reportCode = await runStep("merge QA report", reportArgs, env, { allowFailure: !args.final });

@@ -168,6 +168,36 @@ function relativeArtifact(out, file) {
   return (path.isAbsolute(file) ? path.relative(out, file) : file).replaceAll(path.sep, "/");
 }
 
+function dashboardDesignBrief(extra = "") {
+  return `Source truth: sample.
+Anti-goals: none.
+Acceptance: rendered QA passes.
+Design quality required: true
+Design quality bar:
+- Design thesis: Clear operational dashboard surface.
+- Primary workflow: Decide next action from the chart.
+- Style posture: Incident room.
+- Why this posture fits: The task needs urgent dashboard triage.
+- Surface quality bar: Dashboard/data visualization.
+- Design exploration depth: Lean.
+- Visual signature: Risk rail.
+- Signature move: Risk rail.
+- Style commitment: Incident room.
+- First-viewport consequence: Risk appears first.
+- Layout consequence: Decision board.
+- Typography consequence: Consistent roles.
+- Color/material consequence: Severity only.
+- Generic pattern rejected: Generic cards.
+- Composition proof: Mobile and desktop screenshots.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable.
+- Reference discovery plan: Check correctness, domain, and taste.
+- Anti-generic checks: Reject generic cards.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+${extra}`;
+}
+
 function screenshotEntriesFromRender(render, out) {
   const entries = [];
   for (const state of render.states || []) {
@@ -301,6 +331,7 @@ async function writeDesignQualityArtifact(out, overrides = {}) {
           type: "element-screenshot",
           path: focusedPath,
           selector: "#primary-chart",
+          focusedEvidenceKind: "chart",
           viewport,
           screenshotMetadata: imageMetadataForBytes(focusedBytes, { width, height }),
         }
@@ -1436,6 +1467,64 @@ Design quality bar:
   assert.ok(qa.incomplete.some((issue) => issue.includes("dashboard/data-viz work must include")));
 });
 
+test("qa-report rejects generic element crops as dashboard focused evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-dashboard-nav-crop-"));
+  await createQaArtifacts(out, {
+    skipDiscovery: true,
+    includeDesktop: true,
+    render: { surface: "dashboard analytics" }
+  });
+  const navBytes = pngBytes(320, 160);
+  const navPath = "screenshots/main-nav-crop.png";
+  await fs.writeFile(path.join(out, navPath), navBytes);
+  const renderPath = path.join(out, "render-results.json");
+  const render = JSON.parse(await fs.readFile(renderPath, "utf8"));
+  render.states[0].actionArtifacts = [{
+    type: "element-screenshot",
+    path: navPath,
+    selector: "nav",
+    viewport: render.states[0].viewport,
+    screenshotMetadata: imageMetadataForBytes(navBytes, { width: 320, height: 160 }),
+  }];
+  await writeJson(renderPath, render);
+  await writeInspectedNotes(path.join(out, "screenshot-notes.md"), screenshotEntriesFromRender(render, out));
+  await fs.writeFile(path.join(out, "design-brief.md"), dashboardDesignBrief());
+  await writeDesignQualityArtifact(out);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("dashboard/data-viz work must include")));
+});
+
+test("qa-report accepts structured focusedEvidenceKind for decision-area crops", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-dashboard-focused-kind-"));
+  await createQaArtifacts(out, {
+    skipDiscovery: true,
+    includeDesktop: true,
+    render: { surface: "dashboard analytics" }
+  });
+  const cropBytes = pngBytes(320, 180);
+  const cropPath = "screenshots/detail-crop.png";
+  await fs.writeFile(path.join(out, cropPath), cropBytes);
+  const renderPath = path.join(out, "render-results.json");
+  const render = JSON.parse(await fs.readFile(renderPath, "utf8"));
+  render.states[0].actionArtifacts = [{
+    type: "element-screenshot",
+    path: cropPath,
+    selector: ".summary-panel",
+    focusedEvidenceKind: "decision-area",
+    viewport: render.states[0].viewport,
+    screenshotMetadata: imageMetadataForBytes(cropBytes, { width: 320, height: 180 }),
+  }];
+  await writeJson(renderPath, render);
+  await writeInspectedNotes(path.join(out, "screenshot-notes.md"), screenshotEntriesFromRender(render, out));
+  await fs.writeFile(path.join(out, "design-brief.md"), dashboardDesignBrief());
+  await writeDesignQualityArtifact(out);
+  await runScript(["scripts/qa-report.mjs", "--out", out, "--static"]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.acceptanceReady, true);
+});
+
 test("qa-report rejects string-only peer fallback and absolute local-system evidence", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-peer-local-"));
   await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
@@ -1489,6 +1578,68 @@ Design quality bar:
   assert.ok(qa.incomplete.some((issue) => issue.includes("fallbackEvidence must be an object")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("executionEvidence must be an object")));
   assert.ok(qa.incomplete.some((issue) => issue.includes("localDesignSystemEvidence") && issue.includes("absolute paths")));
+});
+
+test("qa-report rejects negative or pending available peer execution wording", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-peer-negative-wording-"));
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), dashboardDesignBrief());
+  await fs.writeFile(path.join(out, "peer-execution.md"), `# Peer Skill Evidence
+
+## impeccable-execution
+
+- craft - not run.
+- bolder - checked and applied.
+- layout - checked and issue resolved.
+- typeset - checked and issue resolved.
+- Pass/fail: Pass
+
+## hallmark-execution
+
+- genericScaffold - checked and passed.
+- decorativePills - checked and passed.
+- fakeChrome - checked and passed.
+- weakHierarchy - checked and passed.
+- Pass/fail: Pass
+`);
+  await writeDesignQualityArtifact(out);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("negative or pending wording for craft")));
+});
+
+test("qa-report resolves repo-relative local evidence against explicit project root", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-project-root-out-"));
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-project-root-src-"));
+  await fs.mkdir(path.join(project, "src"), { recursive: true });
+  await fs.writeFile(path.join(project, "src", "tokens.css"), ":root { --surface: #fff; }\n");
+  await createQaArtifacts(out, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), dashboardDesignBrief());
+  await writeDesignQualityArtifact(out, {
+    referenceDiscovery: {
+      outcome: "local-system-sufficient",
+      localDesignSystemEvidence: "src/tokens.css",
+      tasteDecision: "Use the caller project's local density and surface tokens."
+    }
+  });
+  await runScript(["scripts/qa-report.mjs", "--out", out, "--static", "--repo-root", project]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.incomplete.some((issue) => issue.includes("localDesignSystemEvidence")), false);
+
+  const missingOut = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-project-root-missing-"));
+  await createQaArtifacts(missingOut, { skipDiscovery: true, includeDesktop: true });
+  await fs.writeFile(path.join(missingOut, "design-brief.md"), dashboardDesignBrief());
+  await writeDesignQualityArtifact(missingOut, {
+    referenceDiscovery: {
+      outcome: "local-system-sufficient",
+      localDesignSystemEvidence: "src/tokens.css",
+      tasteDecision: "Use the caller project's local density and surface tokens."
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", missingOut, "--static", "--repo-root", path.join(project, "missing")]), /qa-report/);
+  const missingQa = JSON.parse(await fs.readFile(path.join(missingOut, "design-qa.json"), "utf8"));
+  assert.ok(missingQa.incomplete.some((issue) => issue.includes("localDesignSystemEvidence") && issue.includes("does not exist")));
 });
 
 test("qa-report rejects parent traversal in local-system and deep-exploration evidence", async () => {
@@ -2502,6 +2653,7 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   const modes = await fs.readFile(path.join(repoRoot, "references/modes.md"), "utf8");
   const research = await fs.readFile(path.join(repoRoot, "references/research-and-inspiration.md"), "utf8");
   const curatedLedger = await fs.readFile(path.join(repoRoot, "references/curated-research-ledger.yaml"), "utf8");
+  const runWebQa = await fs.readFile(path.join(repoRoot, "scripts/run-web-qa.mjs"), "utf8");
   const pkg = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
 
   for (const phrase of [
@@ -2534,6 +2686,7 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(designQualityGates.includes("Do not turn a simulated-data caveat into the visual"));
   assert.ok(designQualityGates.includes("designQualityRequired"));
   assert.ok(designQualityGates.includes("must also include focused chart"));
+  assert.ok(designQualityGates.includes("focusedEvidenceKind"));
   assert.ok(designQualityGates.includes("future beyond normal clock skew"));
   assert.ok(designQualityGates.includes("parent-directory traversal"));
   const routing = await fs.readFile(path.join(repoRoot, "references/routing.md"), "utf8");
@@ -2564,12 +2717,15 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(readme.includes("### Directs The Work"));
   assert.ok(readme.includes("### Verifies Real UI States"));
   assert.ok(readme.includes("## How To Prompt The Skill"));
+  assert.ok(readme.includes("Platform examples:"));
   assert.ok(readme.includes("## How To Install With AI-Assisted Prompts"));
   assert.ok(readme.includes("## More Technical Install Path"));
   assert.ok(readme.indexOf("## How To Prompt The Skill") < readme.indexOf("## How To Install With AI-Assisted Prompts"));
   assert.ok(readme.indexOf("## How To Install With AI-Assisted Prompts") < readme.indexOf("## More Technical Install Path"));
   assert.ok(readme.indexOf("Option 1, Codex with the recommended peer-skill bundle") < readme.indexOf("Option 2, Codex orchestrator only"));
   assert.ok(readme.indexOf("Option 1, full bundle for most Codex users") < readme.indexOf("Option 2, orchestrator only"));
+  assert.ok(runWebQa.includes("DESIGN_DIRECTOR_PROJECT_ROOT"));
+  assert.ok(runWebQa.includes("\"--repo-root\", projectRoot"));
   for (const scriptName of ["setup", "verify", "qa:web", "qa:web:draft", "qa:web:ci", "qa:web:final", "qa:native:ios", "qa:native:android", "brief:new", "research:ledger", "install:codex:bundle"]) {
     assert.ok(pkg.scripts[scriptName], `package script missing: ${scriptName}`);
   }
