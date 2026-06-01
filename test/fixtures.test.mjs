@@ -360,6 +360,15 @@ test("visual audit leaves fixed, hierarchy, and normal flow role fixtures withou
   }
 });
 
+test("visual audit warns on generic non-interactive pill labels", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-visual-pills-"));
+  const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/generic-pills.html")).toString();
+  await runScript(["scripts/visual-consistency-audit.mjs", "--url", fixtureUrl, "--out", out, "--viewports", "375x700", "--max-elements", "500"]);
+  const audit = JSON.parse(await fs.readFile(path.join(out, "visual-consistency-audit.json"), "utf8"));
+  const warnings = audit.states.flatMap((state) => state.audit?.warnings || []);
+  assert.ok(warnings.some((finding) => finding.type === "generic-pill-capsule"));
+});
+
 test("render-check screenshot names include viewport width and height", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-render-name-"));
   const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/fixed.html")).toString();
@@ -586,6 +595,147 @@ test("qa-report --static allows missing state discovery when other evidence is c
   assert.equal(qa.qaMode, "final-static");
   assert.equal(qa.acceptanceReady, true);
   assert.equal(qa.evidenceCompleteness.artifacts.stateDiscovery.waived, true);
+});
+
+test("qa-report requires design quality fields for greenfield concept builds", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-missing-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: sample support data.
+
+## Anti-Goals
+
+Do not invent data.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("design quality bar")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("design thesis")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("primary workflow")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("style posture")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("design exploration depth")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("signature move")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("style commitment")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("first-viewport consequence")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("Impeccable route")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("Impeccable") && issue.includes("execution evidence")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("reference discovery plan")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("anti-slop review")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("Hallmark") && issue.includes("execution evidence")));
+});
+
+test("qa-report accepts filled design quality fields for greenfield concept builds", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-filled-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: sample support data.
+
+## Anti-Goals
+
+Do not invent data or copy reference assets.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center for support leads that makes risk and next action visible in the first viewport.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room for a support lead, with risk-first structure and restrained operations-console styling.
+- Surface quality bar: Dashboard/data visualization with metric roles, chart truth, source label, and table scanning rhythm.
+- Design exploration depth: Lean; use one correctness source, one support-operations domain source, and one taste/art-direction source before implementation.
+- Visual signature: Editorial operational header, high-contrast risk language, compact metrics, and direct chart labels.
+- Signature move: The first screen frames the dashboard as a support incident room, making SLA risk and owner accountability visible before decorative analytics.
+- Style commitment: Incident-room command surface, not generic SaaS analytics.
+- First-viewport consequence: The lead queue, risk drivers, and staffing move appear before any table tour.
+- Layout consequence: A decision board and evidence rail replace equal metric cards plus a chart.
+- Typography consequence: Dense operational type scale separates verdict, drivers, and table rows without random size drift.
+- Color/material consequence: Severity color is reserved for operational risk while the base surface stays neutral.
+- Generic pattern rejected: Header plus equal cards plus chart plus table.
+- Composition proof: The first viewport leads with the operating model, then metrics, then chart and owner table across desktop and mobile.
+- Impeccable route: Run impeccable craft and bolder for the greenfield dashboard, then layout and typeset for dense operations hierarchy.
+- Impeccable execution: Loaded the Impeccable skill plus craft, bolder, layout, and typeset command references; applied craft completeness, bolder anti-generic checks, dense layout hierarchy, and typography consistency checks.
+- Reference discovery plan: Check dashboard interaction standards, a component-system table reference, a chart-labeling reference, and one high-reputation operations-dashboard inspiration source; reject any source that would require copying assets.
+- Anti-generic checks: Avoid fake dashboard chrome, equal-weight card walls, and metric cards plus chart as an unexamined default.
+- Hallmark / anti-slop review: Run Hallmark pre-emit critique before final acceptance; if unavailable, use the Design Quality Gates checklist.
+- Hallmark execution: Loaded Hallmark and ran the pre-emit anti-slop review; rejected generic pills, fake dashboard chrome, and equal-weight card walls.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await runScript(["scripts/qa-report.mjs", "--out", out, "--static"]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.acceptanceReady, true);
+});
+
+test("qa-report requires triggered secondary Impeccable commands for dashboards", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-impeccable-secondary-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Platform Surface
+
+\`dashboard\`
+
+## Source Truth / Local Truth
+
+Source truth: sample operations data.
+
+## Anti-Goals
+
+Do not invent data or copy reference assets.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center that makes risk and next action visible in the first viewport.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room for an operations lead.
+- Surface quality bar: Dashboard/data visualization with metric roles, chart truth, source label, and table scanning rhythm.
+- Design exploration depth: Lean.
+- Visual signature: Operational header, high-contrast risk language, compact metrics, and direct chart labels.
+- Signature move: The first screen frames the dashboard as an incident room rather than decorative analytics.
+- Style commitment: Incident-room queue board, not generic SaaS analytics.
+- First-viewport consequence: The top queue and staffing action are visible before diagnostics.
+- Layout consequence: Decision board replaces equal metric cards.
+- Typography consequence: Verdict and diagnostics use a fixed role-based scale.
+- Color/material consequence: Severity colors are reserved for risk states.
+- Generic pattern rejected: Header plus equal cards plus chart plus table.
+- Composition proof: The first viewport leads with the operating model, then metrics, then chart and owner table.
+- Impeccable route: Run impeccable craft and bolder for the greenfield dashboard.
+- Impeccable execution: Loaded the Impeccable skill plus craft and bolder command references and applied craft and anti-generic checks.
+- Reference discovery plan: Check dashboard interaction standards, a component-system table reference, and a chart-labeling reference.
+- Anti-generic checks: Avoid fake dashboard chrome, equal-weight card walls, and metric cards plus chart as an unexamined default.
+- Hallmark / anti-slop review: Run Hallmark pre-emit critique before final acceptance.
+- Hallmark execution: Loaded Hallmark and ran the pre-emit anti-slop review.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("missing required command") && issue.includes("layout") && issue.includes("typeset")));
 });
 
 test("dom-audit separates static navigation links from stateful link controls", async () => {
@@ -1506,6 +1656,35 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   }
   assert.ok(modes.includes("create a new site/app"));
   assert.ok(modes.includes("concept -> implement -> qa"));
+  assert.ok(readme.includes("Design Quality Bar"));
+  assert.ok(readme.includes("functional but bland"));
+  assert.ok(readme.includes("style posture"));
+  assert.ok(readme.includes("signature move"));
+  assert.ok(readme.includes("Impeccable route"));
+  assert.ok(readme.includes("Impeccable execution"));
+  assert.ok(readme.includes("reference discovery"));
+  assert.ok(readme.includes("impeccable craft"));
+  assert.equal(readme.includes("| Request or project type | Default Impeccable route | Add when needed |"), false);
+  assert.ok(readme.includes("decorative pills"));
+  const designQualityGates = await fs.readFile(path.join(repoRoot, "references/design-quality-gates.md"), "utf8");
+  assert.ok(designQualityGates.includes("Hallmark / Anti-Slop Review"));
+  assert.ok(designQualityGates.includes("Impeccable Craft Gate"));
+  assert.ok(designQualityGates.includes("Execution evidence is required"));
+  assert.ok(designQualityGates.includes("\"No external references used\" is not"));
+  assert.ok(designQualityGates.includes("Do not turn a simulated-data caveat into the visual"));
+  const routing = await fs.readFile(path.join(repoRoot, "references/routing.md"), "utf8");
+  assert.ok(routing.includes("Impeccable Command Selection"));
+  assert.ok(routing.includes("Secondary Command Trigger Rules"));
+  assert.ok(routing.includes("These are requirements, not suggestions"));
+  assert.ok(routing.includes("An Impeccable route is not satisfied by naming commands"));
+  assert.ok(routing.includes("Standalone Output Routing"));
+  assert.ok(modes.includes("design thesis"));
+  assert.ok(modes.includes("style posture"));
+  assert.ok(modes.includes("signature move"));
+  assert.ok(modes.includes("Standalone Mockup Isolation"));
+  assert.ok(modes.includes("Static Mockup Fast Path"));
+  assert.ok(modes.includes("reference discovery pass"));
+  assert.ok(designQualityGates.includes("functional but generic"));
   assert.ok(research.includes("GitHub Design Skills Or Agent Workflows"));
   assert.ok(research.includes("allowed_use"));
   assert.ok(research.includes("checked_at"));
@@ -1553,7 +1732,8 @@ test("curated research ledger records source licenses, use boundaries, and watch
   assert.ok(rows.some((row) => row.includes('allowed_use: "do not use"')));
   assert.ok(rows.some((row) => row.includes('type: "GitHub skill"')));
   assert.ok(rows.some((row) => row.includes("Mobbin") && row.includes('allowed_use: "do not use"')));
-  assert.equal(/\/Users\/|BGA|BGG|BoardGameGeek|Crokinole/i.test(ledger), false);
+  const privateMarkerPattern = /\/Users\/|\/Volumes\/|localhost:\d+|127\.0\.0\.1:\d+|\.design-director\/field-test/i;
+  assert.equal(privateMarkerPattern.test(ledger), false);
 });
 
 test("public package whitelist and docs avoid private generated artifacts", async () => {
@@ -1577,6 +1757,25 @@ test("brief and research ledger initializers create required fields", async () =
   const ledger = await fs.readFile(path.join(out, "research-ledger.yaml"), "utf8");
   assert.ok(brief.includes("`dashboard`"));
   assert.ok(brief.includes("Missing local truth"));
+  assert.ok(brief.includes("Design Quality Bar"));
+  assert.ok(brief.includes("Design thesis"));
+  assert.ok(brief.includes("Style posture"));
+  assert.ok(brief.includes("Design exploration depth"));
+  assert.ok(brief.includes("Signature move"));
+  assert.ok(brief.includes("Style commitment"));
+  assert.ok(brief.includes("First-viewport consequence"));
+  assert.ok(brief.includes("Layout consequence"));
+  assert.ok(brief.includes("Typography consequence"));
+  assert.ok(brief.includes("Color/material consequence"));
+  assert.ok(brief.includes("Generic pattern rejected"));
+  assert.ok(brief.includes("Impeccable route"));
+  assert.ok(brief.includes("Impeccable execution"));
+  assert.ok(brief.includes("Reference discovery plan"));
+  assert.ok(brief.includes("metric cards plus a chart"));
+  assert.ok(brief.includes("integrated data caveats"));
+  assert.ok(brief.includes("generic pills/chips/capsules"));
+  assert.ok(brief.includes("Hallmark / anti-slop review"));
+  assert.ok(brief.includes("Hallmark execution"));
   assert.ok(brief.includes("Acceptance Gates"));
   for (const field of ["checked_at", "license_source", "package_version_or_commit", "maintenance_signal_checked_at", "do_not_copy"]) {
     assert.ok(ledger.includes(field), `ledger missing ${field}`);

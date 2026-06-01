@@ -40,9 +40,11 @@ Exit and use a specialist directly when:
    6. External references.
 4. Classify surface and specialist owner. See `references/routing.md`.
 5. Produce or update `.design-director/design-brief.md` unless the user requested a quick routing answer.
-6. Choose reference depth, only after the brief exists. See `references/reference-tiers.md`.
-7. Assign exactly one owner for direction, implementation, and validation. See `references/handoff-conflicts.md`.
-8. After visual implementation, rendered QA is mandatory. See `references/validation-contract.md`.
+6. For standalone mockups, benchmarks, or exploratory static artifacts where the user did not name an existing app/page to modify, create an isolated output folder before implementation. See `references/modes.md`.
+7. For `concept`, `revamp`, and greenfield `concept -> implement -> QA` work, define a design thesis, style posture, compact style commitment, visible consequence fields, signature move, surface quality bar, design exploration depth, Impeccable route, peer-skill execution evidence, and reference discovery plan before implementation, then run Impeccable plus Hallmark/anti-slop review before acceptance. See `references/design-quality-gates.md`.
+8. Choose design exploration depth, only after the brief exists. Default to lean design-element exploration; use standard/deep only when the user asks for broader inspiration, multiple directions, or lawful source curation. See `references/reference-tiers.md`.
+9. Assign exactly one owner for direction, implementation, and validation. See `references/handoff-conflicts.md`.
+10. After visual implementation, rendered QA is mandatory. See `references/validation-contract.md`.
 
 ## Token Discipline
 
@@ -62,6 +64,7 @@ Rendered QA must exercise the interface the way a user will use it. Static defau
 
 Load focused references only when relevant:
 
+- Concept, revamp, or greenfield build quality, including Impeccable command selection: `references/design-quality-gates.md`.
 - Dense apps/manuals/catalogs: `references/dense-reference-apps.md`.
 - Motion/animation: `references/animation-motion.md`.
 - Dashboards/charts/maps/reports: `references/data-viz-contract.md`.
@@ -99,6 +102,9 @@ Do not call design work accepted if any relevant blocker remains unwaived. Core 
 - Screenshots, active states, or state discovery were generated/skipped without inspection notes or waiver.
 - Untested active states or uninspected generated screenshots.
 - Visual consistency failures that contradict the intended hierarchy, including visibly camouflaged controls.
+- For `concept`, `revamp`, or greenfield work: no named design thesis, no named style posture, no signature move, no surface quality bar, no Impeccable route, no Impeccable execution evidence, no reference discovery plan, or a result that is merely a generic functional scaffold.
+- For broad design work: no compact style commitment with visible first-viewport, layout, typography, color/material, and generic-pattern consequences.
+- For broad design work: skipped Impeccable execution, skipped reference discovery, or skipped Hallmark/anti-slop review when the output is being accepted as final.
 
 Use `references/validation-contract.md` and `references/severity-policy.md` for the full acceptance contract.
 

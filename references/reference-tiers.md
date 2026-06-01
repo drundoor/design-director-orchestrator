@@ -1,19 +1,46 @@
 # Reference Tiers
 
-Use external references only after a local brief exists. Separate broad learning from implementation decisions.
+Use external references only after a local brief exists. Separate broad learning
+from implementation decisions. For design work, this is design-element
+exploration: visual language, interaction patterns, typography, motion, data
+display, component mechanics, fonts, assets, and taste. It is not market or user
+research unless the user asks for that separately.
 
-## Reference Depths
+For `concept`, `revamp`, and greenfield work, perform reference discovery by
+default. The goal is not to copy outside work; it is to verify that the design
+choice is informed by standards, strong design systems, domain mechanics, and
+high-reputation inspiration where useful. A broad design result with no
+reference discovery is incomplete unless the user forbids browsing or the
+environment is offline.
 
-- `reference_survey`: 4-12 sources for pattern discovery only. Output patterns, not design direction.
-- `active_references`: 1-5 sources that shape a direction. Each source needs a distinct role.
-- `implementation_locks`: 1-3 sources for concrete layout, motion, behavior, or component decisions.
+## Design Exploration Depths
+
+- `lean` (default): 2-3 high-signal sources, ideally one correctness/behavior
+  source, one domain/product mechanics source, and one taste/art-direction
+  source. Use this for normal implementation so the orchestrator stays fast.
+- `standard`: 4-7 sources for a requested style/inspiration pass, often with
+  1-2 lightweight directions before implementation.
+- `deep`: explicit opt-in for a large design exploration, lawful source
+  curation, or multiple directions. Use more sources as needed, record rejected
+  buckets, and expect higher time/token cost.
+
+The older ledger labels still apply inside any depth:
+
+- `reference_survey`: pattern discovery only. Output patterns, not design
+  direction.
+- `active_references`: sources that shape a direction. Each source needs a
+  distinct role.
+- `implementation_locks`: sources for concrete layout, motion, behavior, or
+  component decisions.
 
 The important rule is not a fixed count. The rule is that no reference may override local truth, accessibility, data semantics, user anti-goals, or the design system.
 
 When the user asks for inspiration, design-library research, or GitHub skill
 research, use `references/research-and-inspiration.md` for the ledger and
-license workflow. Do not vendor code, assets, templates, fonts, or third-party
-skills until the exact license and allowed use have been recorded.
+license workflow. In user-facing copy, call this "design exploration" or
+"design-element research" unless the task is truly research-heavy. Do not vendor
+code, assets, templates, fonts, or third-party skills until the exact license and
+allowed use have been recorded.
 
 ## S0: Local Truth
 
@@ -88,6 +115,11 @@ Treat GSAP as the default reference implementation when the interaction needs pr
 ## S4: Read-Only Inspiration
 
 Extract principles only. Do not copy screens, brand skins, animation, layouts, copy, screenshots, or assets.
+
+Use S4 deliberately as the taste/art-direction source in lean broad design work.
+Correctness systems such as Carbon, Material, WAI, or GOV.UK do not by
+themselves satisfy the taste reference role unless the brief is deliberately
+plain utility.
 
 - Practical Typography: typography judgment, line length, dense reading, hierarchy.
 - Design Spells: microinteraction and delight principles after usability works.

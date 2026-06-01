@@ -58,7 +58,8 @@ function usage() {
 Collects visual consistency evidence that generic DOM checks miss: peer
 typography mismatches, grid/row alignment drift, spacing outliers, related
 width mismatches, media-card anchoring issues, camouflaged controls, and
-occluded/clipped overlays.
+occluded/clipped overlays. It also warns on generic non-interactive
+pill/capsule labels so they can be justified or removed during design review.
 
 State actions can open active UI before auditing:
 {
@@ -266,6 +267,12 @@ async function main() {
               const computed = (el) => {
                 const style = getComputedStyle(el);
                 const lineHeight = Number.parseFloat(style.lineHeight);
+                const borderRadius = Math.max(
+                  Number.parseFloat(style.borderTopLeftRadius) || 0,
+                  Number.parseFloat(style.borderTopRightRadius) || 0,
+                  Number.parseFloat(style.borderBottomRightRadius) || 0,
+                  Number.parseFloat(style.borderBottomLeftRadius) || 0,
+                );
                 return {
                   fontSize: Number.parseFloat(style.fontSize) || 0,
                   fontWeight: Number.parseFloat(style.fontWeight) || 400,
@@ -274,6 +281,9 @@ async function main() {
                   display: style.display,
                   backgroundColor: style.backgroundColor,
                   borderColor: style.borderColor,
+                  borderRadius,
+                  borderStyle: style.borderStyle,
+                  borderWidth: Number.parseFloat(style.borderWidth) || 0,
                   color: style.color,
                   boxShadow: style.boxShadow,
                 };
@@ -541,6 +551,42 @@ async function main() {
                 }
                 return { r: 255, g: 255, b: 255, a: 1 };
               };
+
+              // Generic decorative pills/capsules are a common AI-slop pattern:
+              // small rounded labels that add visual busyness without a real
+              // component role. This is a warning because status tags can be
+              // valid, but they need an explicit reason in the design review.
+              for (const el of all) {
+                const tag = el.tagName.toLowerCase();
+                if (["button", "a", "input", "select", "textarea", "option"].includes(tag)) continue;
+                const role = el.getAttribute("role");
+                if (["button", "link", "tab", "menuitem", "option", "switch", "checkbox", "radio"].includes(role)) continue;
+                const text = directTextFor(el) || textFor(el);
+                if (!text || text.length > 48) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 30 || rect.height < 16 || rect.height > 44) continue;
+                const style = computed(el);
+                if (style.borderRadius < Math.max(14, rect.height * 0.45)) continue;
+                const bg = parseRgb(style.backgroundColor);
+                const border = parseRgb(style.borderColor);
+                const parentBg = nearestBackground(el);
+                const hasVisibleFill = Number.isFinite(colorDistance(bg, parentBg)) && colorDistance(bg, parentBg) > 6;
+                const hasVisibleBorder = style.borderStyle !== "none" && style.borderWidth > 0 && Number.isFinite(colorDistance(border, parentBg)) && colorDistance(border, parentBg) > 6;
+                if (!hasVisibleFill && !hasVisibleBorder) continue;
+                const signature = `${classText(el)} ${el.id || ""} ${role || ""}`.toLowerCase();
+                if (!/(pill|chip|badge|tag|status|trend|delta|label|source|meta)/.test(signature)) continue;
+                addFinding("warning", {
+                  type: "generic-pill-capsule",
+                  selector: selectorFor(el),
+                  message: "Non-interactive capsule/pill label found; verify it serves a real component or status role instead of generic decoration.",
+                  samples: [{
+                    text,
+                    selector: selectorFor(el),
+                    rect: rectFor(el),
+                    borderRadius: Number(style.borderRadius.toFixed(1)),
+                  }],
+                });
+              }
 
               for (const control of [...document.querySelectorAll("button, select, input, textarea, [role='button'], [role='combobox']")].filter(visible)) {
                 const style = computed(control);

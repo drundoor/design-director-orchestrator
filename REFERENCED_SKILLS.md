@@ -2,6 +2,12 @@
 
 Design Director routes work to other skills by name, but those skills are optional integrations. They are not required to use this repository and are not bundled unless explicitly copied into the repo.
 
+Impeccable is the default peer route for broad web/front-end craft, redesign,
+layout, typography, responsive adaptation, production hardening, copy clarity,
+color, and motion review. If it is not installed, Design Director should record
+the fallback and treat final broad design acceptance as limited unless the user
+explicitly waives that route.
+
 ## License Review Result
 
 - `hallmark`

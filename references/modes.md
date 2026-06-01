@@ -30,6 +30,7 @@ Map common user language to the smallest useful mode:
 | "build this design", "implement the chosen direction" | `implement` |
 | "prove it is ready", "run final QA", "acceptance check" | `qa` |
 | "create a new site/app" | `concept -> implement -> qa` |
+| "static mockup", "benchmark", "sample dashboard", "show me a result" | `concept -> implement -> draft qa` in isolated output unless final QA is requested |
 
 If the user says redesign, revamp, makeover, or make it better, default to
 `revamp` unless they explicitly say "no code changes", "audit only", or
@@ -59,7 +60,51 @@ If the user says redesign, revamp, makeover, or make it better, default to
 
 For a new build with no existing code, the brief must explicitly mark local
 truth as missing and capture the target audience, content/data availability,
-style request, inspirations, constraints, and anti-goals before implementation.
+style request, inspirations, constraints, anti-goals, design thesis, style
+posture, signature move, Impeccable route, peer-skill execution evidence,
+reference discovery plan, and surface quality bar before implementation. Use
+`references/design-quality-gates.md`.
+
+For `revamp`, `makeover`, `make it better`, and greenfield `create` requests,
+do not accept "functional but bland" as success. The output needs a named design
+thesis, style posture, signature move, and surface-specific quality bar even
+when the user did not supply a style direction. Broad frontend/web work also
+needs an Impeccable command selection and a reference discovery pass unless the
+user explicitly opts out.
+
+Default to lean design-element exploration, not a large research project:
+choose one strong style commitment, use a compact reference mix, and implement.
+Use `standard` or `deep` only when the user asks for broader inspiration,
+multiple directions, lawful source curation, or a larger exploration pass.
+
+## Standalone Mockup Isolation
+
+If the user asks for a standalone static mockup, benchmark, sample screen, or
+new exploratory artifact and does not name an existing route/page/component to
+modify, isolate the work:
+
+- Create a scoped folder such as `.design-director/mockups/<slug>/`.
+- Put the mockup HTML/CSS/assets, design brief, research ledger, screenshots,
+  and QA artifacts inside that folder.
+- Do not overwrite the repo-level `.design-director/design-brief.md` or
+  unrelated QA artifacts.
+- Read local truth only to understand environment constraints and available
+  tooling. Do not treat unrelated existing product pages, prior generated
+  mockups, or old QA artifacts as product requirements unless the user names
+  them.
+- If a real app/page is named, modify that target instead and record why the
+  isolated-output rule did not apply.
+
+## Static Mockup Fast Path
+
+For repeatable benchmark/static-mockup runs, optimize for design signal first:
+
+- Build the isolated mockup and run draft QA at 3 representative viewports:
+  mobile, tablet, and desktop.
+- Inspect those screenshots and fix obvious design defects.
+- Do not claim final acceptance from the fast path.
+- Run the full default viewport matrix and final QA only when the user asks for
+  final acceptance, deployment, or production readiness.
 
 ## Prompt Patterns
 
@@ -72,7 +117,9 @@ style request, inspirations, constraints, and anti-goals before implementation.
 - "Run native iOS QA on the SwiftUI app in Simulator, including Dynamic Type and dark mode." -> `qa + native-ios`
 - "Run Android visual/accessibility QA on the Compose screen in emulator." -> `qa + native-android`
 - "Create a new site for this consulting studio in a calm editorial style and run final QA." -> `concept -> implement -> qa + marketing-web`
+- "Create a static dashboard mockup for a support queue manager." -> isolated `concept -> implement -> draft qa + dashboard`
 - "Research design systems and GitHub UI skills we can lawfully reference for this dashboard." -> `study + dashboard`
+- "Run a deep design exploration before building this dashboard." -> `study -> concept + dashboard`, then implement only after direction selection if requested
 - "Use these screenshots as inspiration, but preserve our product data model and do not copy assets." -> `study -> concept`
 
 ## Style Intake
@@ -87,6 +134,15 @@ Capture style in ordinary words, then translate it into constraints:
 - accessibility and platform constraints
 - content, data, imagery, and copy availability
 - target platforms and breakpoints
+- design thesis, visual signature, and anti-generic checks when the work is a
+  revamp or new build
+- style posture and signature move, inferred and stated when the user did not
+  provide them
+- compact style commitment with first-viewport, layout, typography,
+  color/material, and generic-pattern consequences
+- design exploration depth: `lean`, `standard`, or `deep`
+- Impeccable route and reference discovery plan for broad design work
+- peer-skill execution evidence for Impeccable and Hallmark/fallback
 
 ## Required Brief Fields
 
@@ -97,6 +153,21 @@ Record:
 - `source_of_truth_ranking`
 - `anti_goals`
 - `reference_strategy`
+- `design_thesis`
+- `style_posture`
+- `signature_move`
+- `impeccable_route`
+- `impeccable_execution`
+- `hallmark_execution`
+- `reference_discovery_plan`
+- `surface_quality_bar`
+- `design_exploration_depth`
 - `state_discovery_status`
+- `style_commitment`
+- `first_viewport_consequence`
+- `layout_consequence`
+- `typography_consequence`
+- `color_material_consequence`
+- `generic_pattern_rejected`
 - `validation_contract`
 - `acceptance_gates`

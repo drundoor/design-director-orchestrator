@@ -46,6 +46,17 @@ async function exists(file) {
 }
 
 function briefTemplate(surface) {
+  const surfaceHint = {
+    "marketing-web": "TODO - first-viewport brand/product signal, meaningful media, narrative posture, and non-generic conversion path.",
+    "web-app": "TODO - primary workflow, task hierarchy, control model, states, and why the layout is better than a generic app shell.",
+    "dashboard": "TODO - operating model, metric roles, chart/table hierarchy, integrated data caveats, and why this is more than metric cards plus a chart.",
+    "data-viz": "TODO - analytical question, scale/encoding truth, integrated source/caveat labels, responsive labels, and chart interaction states.",
+    "game-canvas": "TODO - gameplay promise, UI fantasy, HUD/menu relationship to canvas, motion/input expectations, and mobile framing.",
+    "native-ios": "TODO - platform-native thesis, navigation, Dynamic Type behavior, appearance states, and why custom styling remains native.",
+    "native-android": "TODO - platform-native thesis, Material/Compose component choices, font-scale behavior, IME states, and dark theme behavior.",
+    "cross-platform": "TODO - shared product thesis plus platform-specific bars for each runtime.",
+    "other": "TODO - surface-specific quality bar and how success will be judged visually.",
+  }[surface] || "TODO - surface-specific quality bar.";
   return `# Design Brief
 
 ## Intent
@@ -71,11 +82,34 @@ TODO - primary users, context, device mix, and success criteria.
 
 ## Desired Style
 
-TODO - named style, mood, density, motion level, and visual references.
+TODO - named style, mood, density, motion level, and visual references. If the user did not provide a style, infer and state one before implementation.
+
+## Design Quality Bar
+
+- Design thesis: TODO - one or two sentences naming the product-specific point of view.
+- Primary workflow: TODO - what the first screen helps the user decide or do.
+- Style posture: TODO - named visual stance, not "clean and modern"; infer one if the user did not provide one.
+- Surface quality bar: ${surfaceHint}
+- Design exploration depth: TODO - lean by default; use standard/deep only when the user asks for broader design-element exploration, multiple directions, or lawful source curation.
+- Visual signature: TODO - concrete typography, composition, color, spacing, imagery, motion, or interaction choices that make the interface distinct.
+- Signature move: TODO - one visible decision that makes the result recognizable, such as composition, type, evidence treatment, media, motion, or domain metaphor.
+- Style commitment: TODO - 5-8 lines max; lock the visible art-direction choice before implementation.
+- First-viewport consequence: TODO - what visibly changes above the fold because of the style commitment.
+- Layout consequence: TODO - what structure rejects the generic header/cards/chart/table scaffold.
+- Typography consequence: TODO - what type scale, density, pairing, or rhythm does.
+- Color/material consequence: TODO - what color, contrast, texture, or surface language does beyond decoration.
+- Generic pattern rejected: TODO - the specific default pattern this design refuses.
+- Composition proof: TODO - first viewport hierarchy, mobile/desktop layout, and why the structure serves the primary workflow.
+- Impeccable route: TODO - primary and secondary Impeccable command(s), such as craft, polish, bolder, layout, typeset, adapt, harden, clarify, colorize, or animate; include every command triggered by the request or record a waiver.
+- Impeccable execution: TODO - actual Impeccable skill and command reference(s) loaded/run, checks applied, or explicit user waiver.
+- Reference discovery plan: TODO - standards, design systems, domain/visualization references, high-reputation inspiration, fonts/assets, or motion sources to check before implementation; record rejected buckets too.
+- Anti-generic checks: TODO - defaults to avoid, such as generic pills/chips/capsules, generic card grids, fake dashboard chrome, stock heroes, web-card native screens, or decorative styling that does not serve the task.
+- Hallmark / anti-slop review: TODO - Hallmark audit/pre-emit critique, or equivalent anti-slop checklist if Hallmark is unavailable.
+- Hallmark execution: TODO - actual Hallmark skill/review loaded/run, or unavailable/waived fallback with reason.
 
 ## Inspirations
 
-- TODO - URL, screenshot, product, design system, library, or "agent may research".
+- TODO - URL, screenshot, product, design system, library, or "agent may research"; broad design work should run a reference discovery pass unless the user forbids browsing.
 - Each source must also appear in \`research-ledger.yaml\` with license/use boundaries.
 
 ## Design System And Libraries

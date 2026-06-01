@@ -12,6 +12,24 @@ when you want a new interface built with QA baked in from the start.
 
 - Audits web, iOS, Android, game/canvas, dashboard, and data-viz surfaces.
 - Creates a brief with source truth, anti-goals, references, owners, and gates.
+- Sets a design thesis and surface quality bar for revamps and new builds, so
+  "functional but bland" does not pass as finished design.
+- Requires a compact style commitment for broad work: what the first viewport,
+  layout, typography, color/material, and rejected generic pattern will look
+  like before implementation starts.
+- Routes broad web/front-end design work through Impeccable by default, then
+  picks the right command for the job: `craft`, `polish`, `bolder`, `layout`,
+  `typeset`, `adapt`, `harden`, `clarify`, `colorize`, or `animate`.
+  New web builds usually start with `impeccable craft`; existing redesigns
+  usually start with `impeccable polish`, then add narrower commands as needed.
+- Requires Impeccable execution evidence for broad web/front-end work. Naming a
+  route is not enough; the brief or QA notes must say what was actually loaded,
+  run, or explicitly waived.
+- Keeps standalone mockups and benchmark artifacts in isolated output folders
+  unless you name an existing product route or component to modify.
+- Runs lean design-element exploration by default: a small mix of correctness,
+  domain, and taste/art-direction references. If you want a large inspiration or
+  source-curation pass, ask for `deep design exploration`.
 - Checks active states: dropdowns, search suggestions, popovers, dialogs,
   drawers, charts, tabs, mobile nav, and details panels.
 - Catches practical UI failures: clipped overlays, hidden controls, tiny text,
@@ -32,7 +50,9 @@ Plain language is enough. Useful prompts:
 - "Make this page look much better, but preserve the product behavior."
 - "Give me three design directions before writing code."
 - "Build a new marketing site for this product and guide the visual direction."
-- "Create a new dashboard from this data and make it feel like a polished SaaS tool."
+- "Create a new dashboard from this data and make a distinct operations tool, not a generic SaaS mockup."
+- "Create a static dashboard mockup for a support queue manager."
+- "Run a deep design exploration first: find references, propose directions, then recommend one before implementation."
 - "Use these screenshots as inspiration, but do not copy their layout or assets."
 - "Research reputable open-source UI libraries and design skills we can lawfully reference for this app; do not copy assets."
 - "Redesign this iPhone screen and run native iOS QA with dark mode and Dynamic Type."
@@ -52,6 +72,29 @@ You can also name the flow directly:
 
 The intent is separate from the platform. Say `repair + native-ios`,
 `qa + native-android`, `create + dashboard`, or `revamp + marketing-web`.
+
+For broad front-end design work, Design Director routes through Impeccable by
+default. The brief's `Impeccable route` line must list the primary command and
+every secondary command triggered by the request. Final QA rejects blank routes
+and mechanically checks the highest-signal combinations: greenfield web work
+needs `craft`, open-ended greenfield work adds `bolder`, broad redesigns need
+`polish`, and dashboard/data-heavy/dense surfaces need `layout` plus `typeset`.
+The brief must also include
+`Impeccable execution` evidence. The full routing rules live in
+`references/routing.md`.
+
+For standalone static mockups or benchmark runs, Design Director should use an
+isolated output folder and a lighter draft QA pass first. Full final QA is for
+acceptance, deployment, or production-readiness requests.
+
+Design exploration depth controls how much outside design material the agent
+uses:
+
+- `lean` is the default. It uses 2-3 high-signal design-element references and
+  one compact style commitment before building.
+- `standard` is for requested inspiration or a couple of lightweight directions.
+- `deep` is opt-in for larger reference passes, lawful source curation, and
+  multiple distinct directions. It is slower and uses more tokens by design.
 
 ## AI-Assisted Install
 
@@ -96,6 +139,20 @@ For a new build, start with a brief and research ledger:
 npm run brief:new -- --surface marketing-web
 npm run research:ledger
 ```
+
+For revamps and new builds, fill in the `Design Quality Bar` section before
+implementation. It asks for the design thesis, primary workflow, visual
+signature, style posture, signature move, Impeccable route, Impeccable
+execution, design exploration depth, style commitment, visible consequences,
+reference discovery plan, composition proof, and anti-generic checks. That is
+the part that prevents a dashboard from becoming "metric cards plus a chart" or
+a marketing site from becoming a generic hero, feature grid, or pile of
+decorative pills.
+
+For ordinary demo or simulated data, label the caveat in a source row, chart
+caption, footnote, or local annotation. Do not make a giant warning banner or
+visual badge unless the user's domain, legal risk, safety risk, or instructions
+call for that level of prominence.
 
 For a web app draft QA run:
 

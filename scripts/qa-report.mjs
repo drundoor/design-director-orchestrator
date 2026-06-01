@@ -927,6 +927,51 @@ function likelyVisualIssues(warnings, limit = 5) {
   return scored.slice(0, limit).map((item) => item.warning);
 }
 
+function extractBriefField(text, field) {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.match(new RegExp(`^\\s*-?\\s*${escaped}\\s*:\\s*(.+)$`, "im"))?.[1]?.trim() || "";
+}
+
+function hasImpeccableCommand(route, command) {
+  return new RegExp(`\\b(?:impeccable\\s+)?${command}\\b`, "i").test(route);
+}
+
+function executionEvidenceProblem(text, field, label, options = {}) {
+  const evidence = extractBriefField(text, field);
+  if (!evidence || /^TODO\b/i.test(evidence)) {
+    return `design-brief.md needs filled ${label} execution evidence for concept/revamp/new-build work`;
+  }
+  const hasUserWaiver = /\b(user waiver|user waived|explicitly waived|waived by user)\b/i.test(evidence);
+  if (options.blockUnavailable && /\b(unavailable|not available|not installed|fallback|manual fallback|skipped|not run)\b/i.test(evidence) && !hasUserWaiver) {
+    return `design-brief.md ${label} execution indicates the peer skill was not run; this needs an explicit user waiver for final acceptance`;
+  }
+  if (/\b(skipped|not run)\b/i.test(evidence) && !/\b(unavailable|not available|not installed|fallback|waiv)/i.test(evidence)) {
+    return `design-brief.md ${label} execution indicates the peer skill was skipped without an unavailable/waived fallback`;
+  }
+  return null;
+}
+
+function requiredImpeccableCommands(text) {
+  const lower = text.toLowerCase();
+  const required = new Set();
+  const greenfield = /\b(concept\s*->\s*implement\s*->\s*qa|greenfield|new build|new site|new app|new dashboard|create\s+\+|build from scratch)\b/i.test(lower);
+  if (greenfield) {
+    required.add("craft");
+  }
+  if (/\b(revamp|redesign|makeover|broad polish)\b/i.test(lower)) {
+    required.add("polish");
+  }
+  if (/\b(dashboard|data-viz|data visualization|data-heavy|dense reference|catalog|admin ui|admin surface)\b/i.test(lower)) {
+    required.add("layout");
+    required.add("typeset");
+  }
+  const bolderWaived = /\b(deliberately plain|plain utility|utilitarian only|bolder waived|user waived bolder|user-supplied strong style|user supplied strong style)\b/i.test(lower);
+  if (!bolderWaived && (greenfield || /\b(functional but bland|generic scaffold|ai-slop|merely functional|bland|generic)\b/i.test(lower))) {
+    required.add("bolder");
+  }
+  return [...required];
+}
+
 function briefProblems(text) {
   const problems = [];
   if (!/(source truth|local truth|source[-\s]?of[-\s]?truth)/i.test(text)) {
@@ -938,7 +983,80 @@ function briefProblems(text) {
   if (!/acceptance/i.test(text)) {
     problems.push("design-brief.md is missing acceptance gates or acceptance notes");
   }
+  if (requiresDesignQualityGate(text)) {
+    if (!/(design quality bar|design thesis|surface quality bar)/i.test(text)) {
+      problems.push("design-brief.md is missing a design quality bar for concept/revamp/new-build work");
+    }
+    if (!/design thesis\s*:/i.test(text) || /design thesis\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled design thesis for concept/revamp/new-build work");
+    }
+    if (!/primary workflow\s*:/i.test(text) || /primary workflow\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled primary workflow for concept/revamp/new-build work");
+    }
+    if (!/style posture\s*:/i.test(text) || /style posture\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled style posture for concept/revamp/new-build work");
+    }
+    if (!/surface quality bar\s*:/i.test(text) || /surface quality bar\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled surface quality bar for concept/revamp/new-build work");
+    }
+    const explorationDepth = extractBriefField(text, "Design exploration depth");
+    if (!explorationDepth || /^TODO\b/i.test(explorationDepth)) {
+      problems.push("design-brief.md needs a filled design exploration depth for concept/revamp/new-build work");
+    } else if (!/\b(lean|standard|deep)\b/i.test(explorationDepth)) {
+      problems.push("design-brief.md design exploration depth must be lean, standard, or deep");
+    }
+    if (!/visual signature\s*:/i.test(text) || /visual signature\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled visual signature for concept/revamp/new-build work");
+    }
+    if (!/signature move\s*:/i.test(text) || /signature move\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled signature move for concept/revamp/new-build work");
+    }
+    for (const field of [
+      "Style commitment",
+      "First-viewport consequence",
+      "Layout consequence",
+      "Typography consequence",
+      "Color/material consequence",
+      "Generic pattern rejected",
+    ]) {
+      const value = extractBriefField(text, field);
+      if (!value || /^TODO\b/i.test(value)) {
+        problems.push(`design-brief.md needs a filled ${field.toLowerCase()} for concept/revamp/new-build work`);
+      }
+    }
+    if (!/composition proof\s*:/i.test(text) || /composition proof\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled composition proof for concept/revamp/new-build work");
+    }
+    const impeccableRoute = extractBriefField(text, "Impeccable route");
+    if (!impeccableRoute || /^TODO\b/i.test(impeccableRoute)) {
+      problems.push("design-brief.md needs a filled Impeccable route for concept/revamp/new-build work");
+    } else {
+      const missingCommands = requiredImpeccableCommands(text).filter((command) => !hasImpeccableCommand(impeccableRoute, command));
+      if (missingCommands.length) {
+        problems.push(`design-brief.md Impeccable route is missing required command(s): ${missingCommands.join(", ")}`);
+      }
+    }
+    const impeccableExecutionProblem = executionEvidenceProblem(text, "Impeccable execution", "Impeccable", { blockUnavailable: true });
+    if (impeccableExecutionProblem) problems.push(impeccableExecutionProblem);
+    if (!/reference discovery plan\s*:/i.test(text) || /reference discovery plan\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled reference discovery plan for concept/revamp/new-build work");
+    }
+    if (!/anti[-\s]?generic checks\s*:/i.test(text) || /anti[-\s]?generic checks\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs filled anti-generic checks for concept/revamp/new-build work");
+    }
+    if (!/(hallmark|anti[-\s]?slop review)\s*:/i.test(text) || /(hallmark|anti[-\s]?slop review)\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled Hallmark or anti-slop review plan for concept/revamp/new-build work");
+    }
+    const hallmarkExecutionProblem = executionEvidenceProblem(text, "Hallmark execution", "Hallmark");
+    if (hallmarkExecutionProblem) problems.push(hallmarkExecutionProblem);
+  }
   return problems;
+}
+
+function requiresDesignQualityGate(text) {
+  return /concept\s*->\s*implement\s*->\s*QA/i.test(text)
+    || /\b(greenfield|new build|new site|new app|new dashboard|create\s+\+\s|revamp|makeover|redesign)\b/i.test(text)
+    || /design quality bar/i.test(text);
 }
 
 function nonFinalReasons({ args, status, qaMode, blockers, incomplete, warnings, globalFinalUrlMismatch }) {
@@ -968,7 +1086,7 @@ function nextActionsFor({ args, blockers, incomplete, warnings }) {
     actions.push("Rerun discovery/render/DOM/visual scripts with one configured qaRunId and fresh artifacts.");
   }
   if (incomplete.some((item) => /design-brief/i.test(item))) {
-    actions.push("Create or update .design-director/design-brief.md with source truth, anti-goals, and acceptance gates.");
+    actions.push("Create or update .design-director/design-brief.md with source truth, anti-goals, design quality bar, and acceptance gates.");
   }
   if (warnings.length) actions.push("Review warning summary and promote warnings confirmed by screenshots or core task paths.");
   if (args.partial) actions.push("Run final QA after notes, state coverage, and waivers are resolved.");

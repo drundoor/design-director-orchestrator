@@ -13,6 +13,11 @@ Record:
 - expected totals or spot-check rows
 - caveats and source labels required in the UI
 
+Caveats and source labels must be visible, but they should be proportional to
+the risk. For ordinary simulated/demo data, use an integrated caption, source
+row, or footnote. Do not make the caveat the dominant visual element unless
+legal, safety, financial, medical, or explicit user constraints require it.
+
 ## Checks
 
 - Axis labels, units, scale type, domains, zero baselines, and truncation.

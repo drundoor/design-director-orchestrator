@@ -1,8 +1,14 @@
-# Research And Inspiration
+# Design Exploration And Inspiration
 
 Use this workflow when the user supplies inspiration, asks for a style, or asks
 the agent to research reputable design systems, UI libraries, websites, or
 GitHub design skills/components.
+
+When talking to users, prefer "design exploration" or "design-element research"
+unless the task is truly broad research. The purpose here is to find transferable
+design elements: composition, typography, interaction, motion, data display,
+component mechanics, fonts, assets, and taste. It is not market research or user
+research unless requested.
 
 ## Workflows
 
@@ -17,7 +23,9 @@ GitHub design skills/components.
 
 ### Agent-Researched Inspiration Websites
 
-1. Ask whether web research is allowed when the user did not explicitly ask for it.
+1. Ask whether web research is allowed when the user did not explicitly ask for
+   it and the environment requires permission. If browsing is already allowed by
+   the current task, keep the default pass lean.
 2. Prefer official sites, portfolios with clear source URLs, respected design
    galleries, public design-system docs, and primary product pages.
 3. Use reputation signals, not popularity alone: designer/operator credibility,
@@ -25,6 +33,22 @@ GitHub design skills/components.
    maintained code, and clear licensing.
 4. Treat most inspiration sites as read-only. Summarize principles; do not copy
    visuals, copy, screenshots, assets, or layouts.
+
+### Efficient Default Pass
+
+For normal implementation, do not run a giant browsing loop. Use `lean`
+design-element exploration:
+
+1. Pick one correctness/behavior source.
+2. Pick one domain/product mechanics source.
+3. Pick one taste/art-direction source that can affect composition, typography,
+   material, motion, or interaction.
+4. Record rejected buckets briefly if no useful source exists.
+5. Move into implementation with a compact style commitment.
+
+Use `deep` only when the user explicitly asks for a broad exploration,
+lawful-source curation, design-library survey, multiple directions, or "spend
+time researching inspiration."
 
 ### OSS Design Libraries
 
