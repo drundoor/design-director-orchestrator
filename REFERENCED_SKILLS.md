@@ -8,6 +8,22 @@ color, and motion review. If it is not installed, Design Director should record
 the fallback and treat final broad design acceptance as limited unless the user
 explicitly waives that route.
 
+## Optional Bundle Installer
+
+This repository can offer a bundled install experience without vendoring
+third-party skill files. `npm run install:codex:bundle` installs Design Director
+and then fetches allowlisted peer skills from their upstream GitHub repositories
+at install time. The installer checks the source license against
+`references/peer-skills.bundle.json`, copies the upstream license into the
+installed peer-skill folder, and writes `BUNDLE-INSTALL.json` with the source,
+ref, commit, license, and role.
+
+This is not legal advice, and the installer intentionally fails closed if an
+upstream license is missing or no longer matches the allowlist. The default peer
+bundle currently includes `impeccable` and `hallmark`; users can install fewer
+peers with `--peers impeccable` or skip the orchestrator itself with
+`--no-design-director`.
+
 ## License Review Result
 
 - `hallmark`
@@ -58,6 +74,8 @@ explicitly waives that route.
 - Include the Design Director orchestrator itself.
 - List optional peer skills by name and expected role.
 - Do not copy third-party or separately installed skill contents unless an explicit license/source has been verified.
+- Prefer the optional bundle installer over vendoring peer-skill contents in
+  this repository.
 - If a referenced skill is added later, include its license and attribution files with it.
 
 ## Packaging Recommendation

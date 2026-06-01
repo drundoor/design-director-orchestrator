@@ -32,6 +32,9 @@ decorative cards, and stock-like imagery.
 - Primary workflow: Help a time-constrained buyer understand the offer and move
   toward contact.
 - Style posture: Product dossier with an editorial consulting voice.
+- Why this posture fits: The buyer is evaluating credibility quickly, so the
+  page should organize proof and offer details like a concise evidence dossier
+  rather than a promotional template.
 - Surface quality bar: Marketing/editorial web. The product or offer must be a
   first-viewport signal, supported by meaningful media and specific copy.
 - Design exploration depth: Lean. Use one behavior/source-truth reference, one

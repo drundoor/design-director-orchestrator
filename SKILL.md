@@ -43,8 +43,9 @@ Exit and use a specialist directly when:
 6. For standalone mockups, benchmarks, or exploratory static artifacts where the user did not name an existing app/page to modify, create an isolated output folder before implementation. See `references/modes.md`.
 7. For `concept`, `revamp`, and greenfield `concept -> implement -> QA` work, define a design thesis, style posture, compact style commitment, visible consequence fields, signature move, surface quality bar, design exploration depth, Impeccable route, peer-skill execution evidence, and reference discovery plan before implementation, then run Impeccable plus Hallmark/anti-slop review before acceptance. See `references/design-quality-gates.md`.
 8. Choose design exploration depth, only after the brief exists. Default to lean design-element exploration; use standard/deep only when the user asks for broader inspiration, multiple directions, or lawful source curation. See `references/reference-tiers.md`.
-9. Assign exactly one owner for direction, implementation, and validation. See `references/handoff-conflicts.md`.
-10. After visual implementation, rendered QA is mandatory. See `references/validation-contract.md`.
+9. For broad final acceptance, write `.design-director/design-quality.json` with the structured gate, peer-skill status, reference-discovery outcome, and screenshot-anchored aesthetic verdict. Single-component repairs and deliberately plain utility can mark the gate not applicable with a reason.
+10. Assign exactly one owner for direction, implementation, and validation. See `references/handoff-conflicts.md`.
+11. After visual implementation, rendered QA is mandatory. See `references/validation-contract.md`.
 
 ## Token Discipline
 
@@ -61,6 +62,7 @@ Rendered QA must exercise the interface the way a user will use it. Static defau
 - Open overlays and menus in both mobile and desktop viewports when they exist. Verify they are visible, usable, above neighboring containers/charts/tables, not clipped, and reachable by keyboard/touch as applicable.
 - Run state discovery or explicitly waive it before final QA when a rendered web surface exists. A manually named default state is not enough for interfaces with controls, overlays, charts, forms, tabs, filters, or nested scroll.
 - Final acceptance means `design-qa.json` has `status: "pass"` and `acceptanceReady: true`, with fresh discovery/render/DOM/visual artifacts sharing one configured `qaRunId`; state-coverage dispositions must bind to the current `discoveryHash`. Evidence-only, partial, stale, mixed-run, generated-run-ID, and screenshot-hash-mismatch reports are not final acceptance. `status: "incomplete"` means evidence is missing or uninspected and is not acceptable for shipping.
+- Broad final acceptance also needs `design-quality.json` with all aesthetic verdicts marked `pass` and tied to inspected screenshot evidence. Prose in the brief is not enough.
 
 Load focused references only when relevant:
 
@@ -104,6 +106,7 @@ Do not call design work accepted if any relevant blocker remains unwaived. Core 
 - Visual consistency failures that contradict the intended hierarchy, including visibly camouflaged controls.
 - For `concept`, `revamp`, or greenfield work: no named design thesis, no named style posture, no signature move, no surface quality bar, no Impeccable route, no Impeccable execution evidence, no reference discovery plan, or a result that is merely a generic functional scaffold.
 - For broad design work: no compact style commitment with visible first-viewport, layout, typography, color/material, and generic-pattern consequences.
+- For broad final design work: no structured `design-quality.json`, no screenshot-anchored aesthetic verdict, no peer-skill availability/fallback record, or any verdict marked `fail` or `unclear`.
 - For broad design work: skipped Impeccable execution, skipped reference discovery, or skipped Hallmark/anti-slop review when the output is being accepted as final.
 
 Use `references/validation-contract.md` and `references/severity-policy.md` for the full acceptance contract.

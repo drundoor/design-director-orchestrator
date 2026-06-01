@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaultPeers": ["impeccable", "hallmark"],
+  "peers": {
+    "impeccable": {
+      "repo": "https://github.com/pbakaus/impeccable.git",
+      "homepage": "https://github.com/pbakaus/impeccable",
+      "ref": "skill-v3.5.0",
+      "skillPath": "plugin/skills/impeccable",
+      "targetName": "impeccable",
+      "expectedLicenses": ["Apache-2.0"],
+      "licenseFiles": ["LICENSE"],
+      "packageLicenseFiles": ["package.json"],
+      "role": "Broad frontend craft, polish, hierarchy, typography, adaptation, hardening, color, and motion critique."
+    },
+    "hallmark": {
+      "repo": "https://github.com/Nutlope/hallmark.git",
+      "homepage": "https://github.com/Nutlope/hallmark",
+      "ref": "main",
+      "skillPath": "skills/hallmark",
+      "targetName": "hallmark",
+      "expectedLicenses": ["MIT"],
+      "licenseFiles": ["LICENSE"],
+      "packageLicenseFiles": ["package.json"],
+      "role": "Anti-slop taste review for generic, repetitive, template-like, or AI-looking interfaces."
+    }
+  }
+}

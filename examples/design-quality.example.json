@@ -1,0 +1,48 @@
+{
+  "design_quality_gate": {
+    "applies": true,
+    "reason": "greenfield dashboard",
+    "depth": "lean",
+    "final_required": true
+  },
+  "designQuality": {
+    "required": true,
+    "thesisExpressed": "pass",
+    "stylePostureExpressed": "pass",
+    "signatureMoveVisible": "pass",
+    "styleCommitmentHonored": "pass",
+    "genericScaffoldAvoided": "pass",
+    "reviewEvidence": [
+      "screenshot-notes.md#screenshots/default-375x700.png"
+    ],
+    "reviewerNotes": "Inspected screenshots show the design thesis, posture, signature move, and style commitment. The first viewport no longer reads as a generic scaffold."
+  },
+  "peerSkills": {
+    "impeccable": {
+      "status": "available",
+      "executionEvidence": "Loaded impeccable craft, bolder, layout, and typeset references; applied the checks before final screenshot inspection."
+    },
+    "hallmark": {
+      "status": "unavailable-fallback-used",
+      "fallbackChecklistCompleted": true,
+      "fallbackEvidence": "Used the Design Quality Gates anti-slop checklist and recorded rejected generic patterns in design-qa.md."
+    }
+  },
+  "referenceDiscovery": {
+    "outcome": "lean-complete",
+    "sources": [
+      {
+        "bucket": "correctness",
+        "source": "WAI behavior or component reference"
+      },
+      {
+        "bucket": "domain",
+        "source": "Domain/product mechanics source"
+      },
+      {
+        "bucket": "taste",
+        "source": "High-reputation art-direction or design-system source"
+      }
+    ]
+  }
+}

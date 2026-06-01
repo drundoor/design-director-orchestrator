@@ -73,6 +73,15 @@ You can also name the flow directly:
 The intent is separate from the platform. Say `repair + native-ios`,
 `qa + native-android`, `create + dashboard`, or `revamp + marketing-web`.
 
+| User asks | Default path | Weight |
+| --- | --- | --- |
+| "Check this UI" | audit | light |
+| "Fix this visual bug" | repair plus draft/final QA | medium |
+| "Make this page much better" | revamp plus lean design exploration | medium |
+| "Build a new dashboard/site/app" | concept -> implement -> QA | medium |
+| "Run deep design exploration" | study/concept with deep source curation | heavy |
+| "Run final design QA" | strict evidence gate | strict |
+
 For broad front-end design work, Design Director routes through Impeccable by
 default. The brief's `Impeccable route` line must list the primary command and
 every secondary command triggered by the request. Final QA rejects blank routes
@@ -100,7 +109,13 @@ uses:
 
 If you want another coding agent to install it for you, paste one of these.
 
-For Codex:
+For Codex with the recommended peer-skill bundle:
+
+```text
+Install https://github.com/drundoor/design-director-orchestrator plus its recommended peer skills. Clone the repo, run `npm run setup`, run `npm run verify`, run `npm run install:codex:bundle -- --dry-run`, then run `npm run install:codex:bundle`. The bundle installer must check peer-skill licenses and record source metadata; do not vendor third-party skill files into this repo.
+```
+
+For Codex, orchestrator only:
 
 ```text
 Install https://github.com/drundoor/design-director-orchestrator as a local Codex skill named design-director. Clone the repo, run `npm run setup`, run `npm run verify`, run `node scripts/install-local.mjs --dry-run --symlink`, then install with `node scripts/install-local.mjs --symlink`. After install, verify that `SKILL.md` is valid and that `npm run verify` passes.
@@ -114,13 +129,27 @@ Clone https://github.com/drundoor/design-director-orchestrator. Run `npm run set
 
 ## Terminal Install
 
-For most Codex users:
+For most Codex users, install the full bundle:
 
 ```sh
 git clone https://github.com/drundoor/design-director-orchestrator.git
 cd design-director-orchestrator
 npm run setup
 npm run verify
+npm run install:codex:bundle -- --dry-run
+npm run install:codex:bundle
+```
+
+The bundle installer fetches allowlisted peer skills from upstream GitHub
+repositories, checks their licenses, copies their upstream license into the
+installed skill folder, and records source/ref/commit metadata. It does not
+vendor those third-party skills into this repository. Use
+`npm run install:codex:bundle -- --peers impeccable` to install only one peer,
+or `--force-peers` to update an existing peer install.
+
+For the orchestrator only:
+
+```sh
 node scripts/install-local.mjs --dry-run --symlink
 node scripts/install-local.mjs --symlink
 ```
@@ -212,6 +241,7 @@ Minimum successful web QA output:
   visual-consistency-audit.json
   discovered-states.json
   state-coverage.json
+  design-quality.json
   screenshot-notes.md
   design-qa.json
   design-qa.md

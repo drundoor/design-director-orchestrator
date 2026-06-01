@@ -18,6 +18,10 @@ Rendered design work needs durable evidence. A build passing is not enough.
 - Impeccable execution evidence in the brief or QA notes for broad
   frontend/web, dashboard, marketing, revamp, and greenfield work.
 - Hallmark or equivalent anti-slop review notes for broad design work.
+- `.design-director/design-quality.json` for broad final design QA. It records
+  whether the design-quality gate applies, the structured aesthetic verdict,
+  peer-skill availability/fallback status, reference-discovery outcome, and
+  deep-exploration artifact status when relevant.
 
 The brief may be omitted only for a short routing answer.
 `design-qa.json.status` must be `pass` and `acceptanceReady` must be `true`
@@ -86,6 +90,11 @@ Use fewer only when the surface clearly does not need them, and record why.
   design thesis, style posture, signature move, style commitment, and avoids a
   generic scaffold, including whether Impeccable and Hallmark or an equivalent
   anti-slop checklist were used.
+- Structured aesthetic verdict for broad final QA: `design-quality.json` must
+  mark `thesisExpressed`, `stylePostureExpressed`, `signatureMoveVisible`,
+  `styleCommitmentHonored`, and `genericScaffoldAvoided` as `pass`, with
+  `reviewEvidence` pointing to inspected screenshot notes or screenshot-note
+  sections inside `.design-director`.
 - Reference discovery evidence for broad design work: the brief, research
   ledger, or QA notes must record which external standards, design systems,
   product/design references, assets, fonts, or motion sources were checked,
@@ -94,9 +103,16 @@ Use fewer only when the surface clearly does not need them, and record why.
 - Lean broad design work needs a reference mix, not a large research project:
   one correctness/behavior source, one domain/product mechanics source, and one
   taste/art-direction source when available. Deeper exploration is opt-in.
+- Lean broad design work may also use `local-system-sufficient` when a mature
+  local design system, screenshots, tokens, or brand system are stronger than
+  live browsing. Record local design-system evidence and the taste decision.
 - Peer-skill execution evidence: the brief or QA notes must record the
   Impeccable command references actually loaded/run and the Hallmark review
   actually loaded/run. Naming a route is not enough.
+- Peer-skill availability evidence: if Impeccable or Hallmark is unavailable,
+  `design-quality.json` may record `unavailable-fallback-used` only when the
+  built-in fallback checklist is completed. If a peer skill is available but
+  skipped, final acceptance fails unless the user waived it.
 
 ## Blocking Failures
 
@@ -122,6 +138,8 @@ Use fewer only when the surface clearly does not need them, and record why.
 - Repeated grid/card columns or attached details/actions drift out of alignment without an explicit hierarchy reason.
 - A non-disabled interactive control blends into its surrounding surface so strongly that its affordance depends on hover, focus, or prior knowledge.
 - Screenshots generated but not inspected.
+- `design-quality.json` is missing, has no screenshot-anchored aesthetic
+  verdict, or marks any final broad design verdict as `fail` or `unclear`.
 - Rendered interactive states were not discovered, configured, inspected, or explicitly waived.
 - User-complained component inspected only in full-page context when a focused crop/state was needed.
 - `concept`, `revamp`, or greenfield output has no named design thesis, no named
@@ -146,15 +164,18 @@ A design pass is accepted only when:
    visible first-viewport/layout/typography/color consequences, Impeccable
    route, Impeccable execution, Hallmark execution, reference discovery plan, and
    anti-generic checks.
-4. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
-5. Implementation changes map back to the brief.
-6. `scripts/discover-states.mjs` was run or explicitly waived with a reason when a rendered web surface exists.
-7. Render, DOM, and visual audit artifacts are fresh and share a configured `qaRunId`.
-8. Rendered screenshots exist for required viewports and key states.
-9. Screenshots were inspected, not merely generated.
-10. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
-11. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
-12. `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
-13. No blocker remains unwaived.
-14. Any waiver includes evidence and reason, and no valid waiver is stale or unused.
-15. Native QA, when applicable, has fresh run metadata, artifact hashes, and unique screenshot/tree evidence per required profile.
+4. `.design-director/design-quality.json` records the applicable gate,
+   screenshot-anchored design verdicts, peer-skill status, and reference
+   discovery outcome for broad final design work.
+5. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
+6. Implementation changes map back to the brief.
+7. `scripts/discover-states.mjs` was run or explicitly waived with a reason when a rendered web surface exists.
+8. Render, DOM, and visual audit artifacts are fresh and share a configured `qaRunId`.
+9. Rendered screenshots exist for required viewports and key states.
+10. Screenshots were inspected, not merely generated.
+11. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
+12. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
+13. `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
+14. No blocker remains unwaived.
+15. Any waiver includes evidence and reason, and no valid waiver is stale or unused.
+16. Native QA, when applicable, has fresh run metadata, artifact hashes, and unique screenshot/tree evidence per required profile.

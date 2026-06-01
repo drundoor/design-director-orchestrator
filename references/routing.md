@@ -58,8 +58,8 @@ waives it.
 
 ## Impeccable Command Selection
 
-Pick and record one primary Impeccable command before implementation. Add a
-secondary command only when the brief has a clear need.
+Pick and record one primary Impeccable command before implementation. Add every
+secondary command whose trigger applies.
 
 - New web app, dashboard, tool, or marketing surface: `impeccable craft`.
 - Existing page/screen broad redesign: `impeccable polish`; use `bolder` when

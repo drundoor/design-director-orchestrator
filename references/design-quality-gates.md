@@ -13,6 +13,9 @@ Before implementation, the brief must name:
 - Style posture: the named visual stance. If the user did not provide a style,
   infer one and state it before implementation. Do not default to "clean and
   modern."
+- Why this posture fits: one sentence tying the visual stance to the audience,
+  primary workflow, content/data, usage frequency, and platform. A posture name
+  without a product-specific reason is not enough.
 - Surface quality bar: the surface-specific bar from this file.
 - Design exploration depth: `lean`, `standard`, or `deep`. This means
   design-element exploration, not market/user research. Use `lean` by default
@@ -152,6 +155,11 @@ were loaded or run and what changed because of them. If Impeccable is
 unavailable or skipped, the work is not final acceptance-ready unless the user
 explicitly waived the peer-skill requirement.
 
+If Impeccable is unavailable for a public install, record that as
+`peerSkills.impeccable: unavailable-fallback-used` in `design-quality.json` and
+complete the built-in fallback checklist. If Impeccable is available but simply
+skipped, final acceptance fails unless the user explicitly waived it.
+
 For native iOS/Android, use the platform specialist as the implementation owner,
 then apply Impeccable as a secondary critique for hierarchy, density, copy,
 specificity, and anti-generic choices when it does not conflict with platform
@@ -173,6 +181,11 @@ file and record that substitution in the brief or QA notes.
 
 If Hallmark is available, use it rather than replacing it with a manual
 checklist. A manual checklist is a fallback, not the normal path.
+
+If Hallmark is unavailable for a public install, record
+`peerSkills.hallmark: unavailable-fallback-used` in `design-quality.json` and
+complete the anti-slop fallback checklist. If Hallmark is available but skipped,
+final acceptance fails unless the user explicitly waived it.
 
 Do not let Hallmark override higher source truth. Accessibility, data truth,
 platform conventions, established design systems, and explicit user anti-goals
@@ -213,6 +226,19 @@ Every reference still needs a reason, transferable principle, do-not-copy
 boundary, and verification gate. Prefer a few high-signal references over a
 large moodboard unless the user chose `deep`.
 
+Deep exploration must produce a concrete artifact, either
+`deep-design-exploration.md` or a research-ledger section, with:
+
+- brief question
+- source buckets checked
+- accepted sources
+- rejected sources and why
+- 2-3 distinct directions unless the task is study-only
+- recommendation
+- do-not-copy constraints
+- implementation risk
+- QA implications
+
 For `concept`, `revamp`, and greenfield work, design-element reference
 discovery is required. At minimum, check whether each relevant bucket has a
 useful source:
@@ -232,6 +258,63 @@ acceptable for broad design work unless the user explicitly forbids browsing or
 the environment is offline; record that as a constraint. Correctness references
 prevent mistakes; taste references prevent generic output. Do not let the former
 stand in for the latter.
+
+`local-system-sufficient` is allowed when a mature local design system,
+existing screenshots, tokens, or brand system already supply enough source
+truth. Record the local design-system evidence and the taste decision derived
+from it. Do not browse merely to satisfy ceremony when local truth is stronger,
+but do record why local truth is enough.
+
+## Structured Final Verdict
+
+For broad final QA, add `.design-director/design-quality.json`. This is a small
+machine-readable contract that keeps the brief from passing on prose alone:
+
+```json
+{
+  "design_quality_gate": {
+    "applies": true,
+    "reason": "greenfield dashboard",
+    "depth": "lean",
+    "final_required": true
+  },
+  "designQuality": {
+    "required": true,
+    "thesisExpressed": "pass",
+    "stylePostureExpressed": "pass",
+    "signatureMoveVisible": "pass",
+    "styleCommitmentHonored": "pass",
+    "genericScaffoldAvoided": "pass",
+    "reviewEvidence": ["screenshot-notes.md#screenshots/default-375x700.png"],
+    "reviewerNotes": "Screenshots show the incident-room posture and signature move."
+  },
+  "peerSkills": {
+    "impeccable": {
+      "status": "available",
+      "executionEvidence": "Loaded craft, bolder, layout, and typeset references."
+    },
+    "hallmark": {
+      "status": "unavailable-fallback-used",
+      "fallbackChecklistCompleted": true,
+      "fallbackEvidence": "Anti-slop checklist completed in design-qa.md."
+    }
+  },
+  "referenceDiscovery": {
+    "outcome": "lean-complete",
+    "sources": [
+      { "bucket": "correctness", "source": "WAI behavior reference" },
+      { "bucket": "domain", "source": "domain/product mechanics source" },
+      { "bucket": "taste", "source": "art-direction source" }
+    ]
+  }
+}
+```
+
+All five `designQuality` verdicts must be `pass` for final acceptance. Each
+verdict must reference inspected screenshot notes or screenshot-note sections,
+not a free-floating "looks good" paragraph. Use `applies: false` only for a
+small component repair, deliberately plain utility, or other narrow task, and
+record the reason.
 
 ## Surface Quality Bars
 

@@ -44,7 +44,8 @@
     "smoke:web": "node scripts/smoke-web.mjs",
     "smoke:native": "node scripts/smoke-native.mjs",
     "smoke:native:fail": "node scripts/smoke-native-fail.mjs",
-    "install:codex": "node scripts/install-local.mjs"
+    "install:codex": "node scripts/install-local.mjs",
+    "install:codex:bundle": "node scripts/install-bundle.mjs"
   },
   "devDependencies": {
     "playwright": "^1.45.0"

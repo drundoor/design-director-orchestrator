@@ -203,6 +203,50 @@ async function createQaArtifacts(out, overrides = {}) {
   return { screenshot };
 }
 
+async function writeDesignQualityArtifact(out, overrides = {}) {
+  await writeJson(path.join(out, "design-quality.json"), {
+    design_quality_gate: {
+      applies: true,
+      reason: "greenfield dashboard",
+      depth: "lean",
+      final_required: true,
+      ...(overrides.design_quality_gate || {})
+    },
+    designQuality: {
+      required: true,
+      thesisExpressed: "pass",
+      stylePostureExpressed: "pass",
+      signatureMoveVisible: "pass",
+      styleCommitmentHonored: "pass",
+      genericScaffoldAvoided: "pass",
+      reviewEvidence: ["screenshot-notes.md#screenshots/default-375x700.png"],
+      reviewerNotes: "Screenshot notes confirm the incident-room posture, signature move, and non-generic layout.",
+      ...(overrides.designQuality || {})
+    },
+    peerSkills: {
+      impeccable: {
+        status: "available",
+        executionEvidence: "Loaded impeccable craft, bolder, layout, and typeset command references."
+      },
+      hallmark: {
+        status: "available",
+        executionEvidence: "Loaded Hallmark pre-emit critique and checked for generic AI slop."
+      },
+      ...(overrides.peerSkills || {})
+    },
+    referenceDiscovery: {
+      outcome: "lean-complete",
+      sources: [
+        { bucket: "correctness", source: "WAI guidance" },
+        { bucket: "domain", source: "support operations mechanics" },
+        { bucket: "taste", source: "incident room art direction" }
+      ],
+      ...(overrides.referenceDiscovery || {})
+    },
+    ...(overrides.extra || {})
+  });
+}
+
 test("discover-states emits safe draft states for generic fixture", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-discover-"));
   const fixtureUrl = pathToFileURL(path.join(repoRoot, "fixtures/visual-invariants/bad.html")).toString();
@@ -657,6 +701,7 @@ Do not invent data or copy reference assets.
 - Design thesis: A queue command center for support leads that makes risk and next action visible in the first viewport.
 - Primary workflow: Decide which queue needs attention first.
 - Style posture: Incident room for a support lead, with risk-first structure and restrained operations-console styling.
+- Why this posture fits: Support leads triage live SLA risk under time pressure, so an incident-room posture fits the workflow and data density.
 - Surface quality bar: Dashboard/data visualization with metric roles, chart truth, source label, and table scanning rhythm.
 - Design exploration depth: Lean; use one correctness source, one support-operations domain source, and one taste/art-direction source before implementation.
 - Visual signature: Editorial operational header, high-contrast risk language, compact metrics, and direct chart labels.
@@ -679,10 +724,307 @@ Do not invent data or copy reference assets.
 
 Rendered QA must pass.
 `);
+  await writeDesignQualityArtifact(out);
   await runScript(["scripts/qa-report.mjs", "--out", out, "--static"]);
   const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.equal(qa.status, "pass");
   assert.equal(qa.acceptanceReady, true);
+});
+
+test("qa-report blocks broad final QA without structured design-quality verdict", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-json-missing-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: sample support data.
+
+## Anti-Goals
+
+Do not invent data.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center for support leads.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room.
+- Why this posture fits: Live support triage needs urgent operational hierarchy.
+- Surface quality bar: Dashboard/data visualization.
+- Design exploration depth: Lean.
+- Visual signature: Risk-first evidence board.
+- Signature move: Incident queue rail.
+- Style commitment: Incident room, not generic SaaS dashboard.
+- First-viewport consequence: Queue risk is visible first.
+- Layout consequence: Decision board replaces equal cards.
+- Typography consequence: Role-based type scale.
+- Color/material consequence: Severity color is reserved for risk.
+- Generic pattern rejected: Generic metric cards.
+- Composition proof: First viewport starts with the triage decision.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable craft, bolder, layout, and typeset references.
+- Reference discovery plan: Check correctness, domain, and taste sources.
+- Anti-generic checks: Reject generic cards and decorative pills.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("design-quality.json is missing")));
+});
+
+test("qa-report blocks failing structured design-quality verdict", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-design-quality-fail-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: sample support data.
+
+## Anti-Goals
+
+Do not invent data.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center for support leads.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room.
+- Why this posture fits: Live support triage needs urgent operational hierarchy.
+- Surface quality bar: Dashboard/data visualization.
+- Design exploration depth: Lean.
+- Visual signature: Risk-first evidence board.
+- Signature move: Incident queue rail.
+- Style commitment: Incident room, not generic SaaS dashboard.
+- First-viewport consequence: Queue risk is visible first.
+- Layout consequence: Decision board replaces equal cards.
+- Typography consequence: Role-based type scale.
+- Color/material consequence: Severity color is reserved for risk.
+- Generic pattern rejected: Generic metric cards.
+- Composition proof: First viewport starts with the triage decision.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable craft, bolder, layout, and typeset references.
+- Reference discovery plan: Check correctness, domain, and taste sources.
+- Anti-generic checks: Reject generic cards and decorative pills.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await writeDesignQualityArtifact(out, {
+    designQuality: { signatureMoveVisible: "fail" }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "fail");
+  assert.ok(qa.blockers.some((issue) => issue.includes("signatureMoveVisible is fail")));
+});
+
+test("qa-report accepts unavailable peer skills only with fallback checklist evidence", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-peer-fallback-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: sample support data.
+
+## Anti-Goals
+
+Do not invent data.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center for support leads.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room.
+- Why this posture fits: Live support triage needs urgent operational hierarchy.
+- Surface quality bar: Dashboard/data visualization.
+- Design exploration depth: Lean.
+- Visual signature: Risk-first evidence board.
+- Signature move: Incident queue rail.
+- Style commitment: Incident room, not generic SaaS dashboard.
+- First-viewport consequence: Queue risk is visible first.
+- Layout consequence: Decision board replaces equal cards.
+- Typography consequence: Role-based type scale.
+- Color/material consequence: Severity color is reserved for risk.
+- Generic pattern rejected: Generic metric cards.
+- Composition proof: First viewport starts with the triage decision.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Impeccable unavailable; built-in fallback checklist completed.
+- Reference discovery plan: Check correctness, domain, and taste sources.
+- Anti-generic checks: Reject generic cards and decorative pills.
+- Hallmark / anti-slop review: Hallmark unavailable; use anti-slop checklist.
+- Hallmark execution: Hallmark unavailable; built-in fallback checklist completed.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await writeDesignQualityArtifact(out, {
+    peerSkills: {
+      impeccable: {
+        status: "unavailable-fallback-used",
+        fallbackChecklistCompleted: true,
+        fallbackEvidence: "Design Quality Gates fallback checklist completed in design-qa.md."
+      },
+      hallmark: {
+        status: "unavailable-fallback-used",
+        fallbackChecklistCompleted: true,
+        fallbackEvidence: "Hallmark anti-slop fallback completed in design-qa.md."
+      }
+    }
+  });
+  await runScript(["scripts/qa-report.mjs", "--out", out, "--static"]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+});
+
+test("qa-report rejects skipped available peer skills and allows local-system-sufficient references", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-peer-skipped-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: local design system and sample support data.
+
+## Anti-Goals
+
+Do not invent data.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center for support leads.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room.
+- Why this posture fits: Live support triage needs urgent operational hierarchy.
+- Surface quality bar: Dashboard/data visualization.
+- Design exploration depth: Lean.
+- Visual signature: Risk-first evidence board.
+- Signature move: Incident queue rail.
+- Style commitment: Incident room, not generic SaaS dashboard.
+- First-viewport consequence: Queue risk is visible first.
+- Layout consequence: Decision board replaces equal cards.
+- Typography consequence: Role-based type scale.
+- Color/material consequence: Severity color is reserved for risk.
+- Generic pattern rejected: Generic metric cards.
+- Composition proof: First viewport starts with the triage decision.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable.
+- Reference discovery plan: Local design system is sufficient for visual language.
+- Anti-generic checks: Reject generic cards and decorative pills.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Skipped while available.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await writeDesignQualityArtifact(out, {
+    peerSkills: {
+      hallmark: { status: "skipped-while-available", executionEvidence: "" }
+    },
+    referenceDiscovery: {
+      outcome: "local-system-sufficient",
+      localDesignSystemEvidence: "design-brief.md#local-truth",
+      tasteDecision: "Use the product's existing operational-density tokens and severity palette."
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("skipped while available")));
+  assert.equal(qa.incomplete.some((issue) => issue.includes("lean-complete")), false);
+});
+
+test("qa-report requires deep exploration accepted/rejected buckets and directions", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-deep-exploration-"));
+  await createQaArtifacts(out, { skipDiscovery: true });
+  await fs.writeFile(path.join(out, "design-brief.md"), `# Design Brief
+
+## Intent
+
+\`concept -> implement -> QA\`
+
+## Source Truth / Local Truth
+
+Source truth: sample support data.
+
+## Anti-Goals
+
+Do not invent data.
+
+## Design Quality Bar
+
+- Design thesis: A queue command center for support leads.
+- Primary workflow: Decide which queue needs attention first.
+- Style posture: Incident room.
+- Why this posture fits: Live support triage needs urgent operational hierarchy.
+- Surface quality bar: Dashboard/data visualization.
+- Design exploration depth: Deep.
+- Visual signature: Risk-first evidence board.
+- Signature move: Incident queue rail.
+- Style commitment: Incident room, not generic SaaS dashboard.
+- First-viewport consequence: Queue risk is visible first.
+- Layout consequence: Decision board replaces equal cards.
+- Typography consequence: Role-based type scale.
+- Color/material consequence: Severity color is reserved for risk.
+- Generic pattern rejected: Generic metric cards.
+- Composition proof: First viewport starts with the triage decision.
+- Impeccable route: impeccable craft, bolder, layout, typeset.
+- Impeccable execution: Loaded Impeccable.
+- Reference discovery plan: Run deep design exploration.
+- Anti-generic checks: Reject generic cards and decorative pills.
+- Hallmark / anti-slop review: Run Hallmark.
+- Hallmark execution: Loaded Hallmark.
+
+## Acceptance Gates
+
+Rendered QA must pass.
+`);
+  await writeDesignQualityArtifact(out, {
+    design_quality_gate: { depth: "deep" },
+    referenceDiscovery: { outcome: "deep-requested" },
+    extra: {
+      deepExploration: {
+        acceptedSources: [],
+        rejectedSources: [],
+        directions: [{ name: "Incident room" }],
+        recommendation: "",
+        doNotCopy: "",
+        implementationRisk: "",
+        qaImplications: ""
+      }
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out, "--static"]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("acceptedSources")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("rejectedSources")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("2-3 directions")));
 });
 
 test("qa-report requires triggered secondary Impeccable commands for dashboards", async () => {
@@ -711,6 +1053,7 @@ Do not invent data or copy reference assets.
 - Design thesis: A queue command center that makes risk and next action visible in the first viewport.
 - Primary workflow: Decide which queue needs attention first.
 - Style posture: Incident room for an operations lead.
+- Why this posture fits: The dashboard is for live operations triage, not broad analytics browsing.
 - Surface quality bar: Dashboard/data visualization with metric roles, chart truth, source label, and table scanning rhythm.
 - Design exploration depth: Lean.
 - Visual signature: Operational header, high-contrast risk language, compact metrics, and direct chart labels.
@@ -1694,11 +2037,14 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(curatedLedger.includes("allowed_use"));
   assert.ok(readme.includes("Draft Vs Final QA"));
   assert.ok(readme.includes("npm run brief:new"));
+  assert.ok(readme.includes("npm run install:codex:bundle"));
+  assert.ok(readme.includes("fetches allowlisted peer skills"));
+  assert.ok(readme.includes("design-quality.json"));
   assert.ok(readme.includes("## AI-Assisted Install"));
   assert.ok(readme.includes("## Terminal Install"));
   assert.ok(readme.indexOf("## Ask It Like This") < readme.indexOf("## AI-Assisted Install"));
   assert.ok(readme.indexOf("## AI-Assisted Install") < readme.indexOf("## Terminal Install"));
-  for (const scriptName of ["setup", "verify", "qa:web", "qa:web:draft", "qa:web:ci", "qa:web:final", "qa:native:ios", "qa:native:android", "brief:new", "research:ledger"]) {
+  for (const scriptName of ["setup", "verify", "qa:web", "qa:web:draft", "qa:web:ci", "qa:web:final", "qa:native:ios", "qa:native:android", "brief:new", "research:ledger", "install:codex:bundle"]) {
     assert.ok(pkg.scripts[scriptName], `package script missing: ${scriptName}`);
   }
 });
@@ -1760,6 +2106,7 @@ test("brief and research ledger initializers create required fields", async () =
   assert.ok(brief.includes("Design Quality Bar"));
   assert.ok(brief.includes("Design thesis"));
   assert.ok(brief.includes("Style posture"));
+  assert.ok(brief.includes("Why this posture fits"));
   assert.ok(brief.includes("Design exploration depth"));
   assert.ok(brief.includes("Signature move"));
   assert.ok(brief.includes("Style commitment"));
@@ -1780,6 +2127,18 @@ test("brief and research ledger initializers create required fields", async () =
   for (const field of ["checked_at", "license_source", "package_version_or_commit", "maintenance_signal_checked_at", "do_not_copy"]) {
     assert.ok(ledger.includes(field), `ledger missing ${field}`);
   }
+});
+
+test("bundle installer manifest and dry-run expose optional peer skill bundle", async () => {
+  const manifest = JSON.parse(await fs.readFile(path.join(repoRoot, "references/peer-skills.bundle.json"), "utf8"));
+  assert.deepEqual(manifest.defaultPeers, ["impeccable", "hallmark"]);
+  assert.equal(manifest.peers.impeccable.expectedLicenses.includes("Apache-2.0"), true);
+  assert.equal(manifest.peers.hallmark.expectedLicenses.includes("MIT"), true);
+  assert.equal(manifest.peers.impeccable.skillPath, "plugin/skills/impeccable");
+  assert.equal(manifest.peers.hallmark.skillPath, "skills/hallmark");
+  const { stdout } = await runScript(["scripts/install-bundle.mjs", "--dry-run", "--peers", "impeccable"]);
+  assert.match(stdout, /peer impeccable/);
+  assert.match(stdout, /expected license: Apache-2\.0/);
 });
 
 test("native-qa-report passes complete iOS evidence", async () => {

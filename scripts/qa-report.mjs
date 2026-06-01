@@ -897,6 +897,188 @@ function sanitizeForOutput(value, outDir) {
   return sanitizeStringForOutput(value, outDir);
 }
 
+const DESIGN_VERDICT_FIELDS = [
+  "thesisExpressed",
+  "stylePostureExpressed",
+  "signatureMoveVisible",
+  "styleCommitmentHonored",
+  "genericScaffoldAvoided",
+];
+const PEER_SKILL_STATUSES = new Set(["available", "unavailable-fallback-used", "user-waived", "skipped-while-available"]);
+const REFERENCE_OUTCOMES = new Set(["lean-complete", "local-system-sufficient", "offline-constrained", "user-forbids-browsing", "deep-requested"]);
+
+function asArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+async function evidenceReferenceExists(outDir, reference) {
+  const [file] = String(reference || "").split("#");
+  if (!file) return false;
+  if (!evidencePathInside(outDir, file)) return false;
+  return pathExists(resolveEvidencePath(outDir, file));
+}
+
+async function validateEvidenceReferences(outDir, references, label, incomplete) {
+  const entries = asArray(references).map((item) => String(item || "").trim()).filter(Boolean);
+  if (!entries.length) {
+    incomplete.push(`${label} needs screenshot-note or screenshot evidence`);
+    return [];
+  }
+  const valid = [];
+  for (const entry of entries) {
+    if (!(await evidenceReferenceExists(outDir, entry))) {
+      incomplete.push(`${label} evidence must reference an existing file inside ${path.basename(outDir)}: ${entry}`);
+    } else {
+      valid.push(entry);
+    }
+  }
+  return valid;
+}
+
+function peerSkillProblems(name, peerSkill = {}) {
+  const incomplete = [];
+  const normalized = {
+    status: peerSkill.status || "",
+    executionEvidence: peerSkill.executionEvidence || peerSkill.execution_evidence || "",
+    fallbackChecklistCompleted: peerSkill.fallbackChecklistCompleted === true || peerSkill.fallback_checklist_completed === true,
+    fallbackEvidence: peerSkill.fallbackEvidence || peerSkill.fallback_evidence || peerSkill.fallbackSummary || peerSkill.fallback_summary || "",
+    waiverEvidence: peerSkill.waiverEvidence || peerSkill.waiver_evidence || "",
+    reason: peerSkill.reason || "",
+  };
+  if (!normalized.status) {
+    incomplete.push(`design-quality.json peerSkills.${name}.status is required`);
+    return { normalized, incomplete };
+  }
+  if (!PEER_SKILL_STATUSES.has(normalized.status)) {
+    incomplete.push(`design-quality.json peerSkills.${name}.status must be available, unavailable-fallback-used, user-waived, or skipped-while-available`);
+  }
+  if (normalized.status === "available" && !String(normalized.executionEvidence).trim()) {
+    incomplete.push(`design-quality.json peerSkills.${name}.executionEvidence is required when the peer skill is available`);
+  }
+  if (normalized.status === "unavailable-fallback-used") {
+    if (!normalized.fallbackChecklistCompleted) {
+      incomplete.push(`design-quality.json peerSkills.${name}.fallbackChecklistCompleted must be true when unavailable fallback is used`);
+    }
+    if (!String(normalized.fallbackEvidence).trim()) {
+      incomplete.push(`design-quality.json peerSkills.${name}.fallbackEvidence is required when unavailable fallback is used`);
+    }
+  }
+  if (normalized.status === "user-waived" && !String(normalized.waiverEvidence || normalized.reason).trim()) {
+    incomplete.push(`design-quality.json peerSkills.${name}.waiverEvidence or reason is required when user waived the peer skill`);
+  }
+  if (normalized.status === "skipped-while-available") {
+    incomplete.push(`design-quality.json peerSkills.${name} was skipped while available; broad design work is not final acceptance-ready`);
+  }
+  return { normalized, incomplete };
+}
+
+function referenceDiscoveryProblems(referenceDiscovery = {}, gate = {}, deepExploration = {}) {
+  const incomplete = [];
+  const warnings = [];
+  const outcome = referenceDiscovery.outcome || referenceDiscovery.status || "";
+  if (!outcome) {
+    incomplete.push("design-quality.json referenceDiscovery.outcome is required for broad design work");
+  } else if (!REFERENCE_OUTCOMES.has(outcome)) {
+    incomplete.push(`design-quality.json referenceDiscovery.outcome must be one of: ${[...REFERENCE_OUTCOMES].join(", ")}`);
+  }
+  if (outcome === "lean-complete") {
+    const buckets = asArray(referenceDiscovery.sources || referenceDiscovery.buckets || referenceDiscovery.checkedBuckets)
+      .map((source) => typeof source === "string" ? source : (source.bucket || source.type || source.role || ""))
+      .join(" ")
+      .toLowerCase();
+    for (const bucket of ["correctness", "domain", "taste"]) {
+      if (!buckets.includes(bucket)) incomplete.push(`design-quality.json referenceDiscovery lean-complete needs a ${bucket} source or checked bucket`);
+    }
+  }
+  if (outcome === "local-system-sufficient") {
+    if (!String(referenceDiscovery.localDesignSystemEvidence || referenceDiscovery.local_design_system_evidence || "").trim()) {
+      incomplete.push("design-quality.json referenceDiscovery.localDesignSystemEvidence is required for local-system-sufficient");
+    }
+    if (!String(referenceDiscovery.tasteDecision || referenceDiscovery.taste_decision || "").trim()) {
+      incomplete.push("design-quality.json referenceDiscovery.tasteDecision is required for local-system-sufficient");
+    }
+  }
+  if (["offline-constrained", "user-forbids-browsing"].includes(outcome) && !String(referenceDiscovery.constraint || referenceDiscovery.reason || "").trim()) {
+    incomplete.push(`design-quality.json referenceDiscovery.${outcome} needs a constraint or reason`);
+  }
+  if (outcome === "deep-requested" || gate.depth === "deep") {
+    const deep = deepExploration || {};
+    const accepted = asArray(deep.acceptedSources || deep.accepted_sources);
+    const rejected = asArray(deep.rejectedSources || deep.rejected_sources);
+    const directions = asArray(deep.directions);
+    if (!accepted.length) incomplete.push("design-quality.json deepExploration.acceptedSources is required for deep design exploration");
+    if (!rejected.length) incomplete.push("design-quality.json deepExploration.rejectedSources is required for deep design exploration");
+    if (!deep.studyOnly && (directions.length < 2 || directions.length > 3)) {
+      incomplete.push("design-quality.json deepExploration.directions must include 2-3 directions unless studyOnly is true");
+    }
+    for (const field of ["recommendation", "doNotCopy", "implementationRisk", "qaImplications"]) {
+      if (!String(deep[field] || "").trim()) incomplete.push(`design-quality.json deepExploration.${field} is required`);
+    }
+  }
+  if (outcome === "offline-constrained") {
+    warnings.push("design-quality.json records offline-constrained reference discovery; treat deep exploration requests as non-final until refreshed online");
+  }
+  return { incomplete, warnings };
+}
+
+async function validateDesignQualityArtifact({ artifact, gate, outDir }) {
+  const data = artifact.data || {};
+  const incomplete = [];
+  const blockers = [];
+  const warnings = [];
+  const required = Boolean(gate.applies);
+
+  if (!required) {
+    if (gate.explicit && !gate.reason) incomplete.push("design-quality.json design_quality_gate.applies is false but no reason is recorded");
+    if (gate.explicit && gate.heuristicApplies && !/\b(single component|component-only|plain utility|deliberately plain|small visual bug|tiny css fix|focused repair)\b/i.test(gate.reason)) {
+      incomplete.push("design-quality.json design_quality_gate.applies is false for broad-looking work; reason must explain the narrow component repair or plain-utility exception");
+    }
+    return { required: false, gateApplies: false, data, incomplete, blockers, warnings };
+  }
+
+  if (!artifact.exists) {
+    incomplete.push("design-quality.json is missing; broad final design QA needs structured gate, peer-skill, reference, and aesthetic verdict evidence");
+    return { required: true, gateApplies: true, data: null, incomplete, blockers, warnings };
+  }
+
+  const rawGate = data.design_quality_gate || data.designQualityGate || {};
+  if (rawGate.applies !== true) incomplete.push("design-quality.json design_quality_gate.applies must be true for broad concept/revamp/new-build final QA");
+  if (!String(rawGate.reason || "").trim()) incomplete.push("design-quality.json design_quality_gate.reason is required");
+  const depth = String(rawGate.depth || rawGate.design_exploration_depth || "").trim().toLowerCase();
+  if (!["lean", "standard", "deep"].includes(depth)) incomplete.push("design-quality.json design_quality_gate.depth must be lean, standard, or deep");
+  if (rawGate.final_required === false || rawGate.finalRequired === false) {
+    incomplete.push("design-quality.json design_quality_gate.final_required is false; this is not final design acceptance");
+  }
+
+  const verdict = data.designQuality || data.design_quality || {};
+  if (verdict.required === false) {
+    incomplete.push("design-quality.json designQuality.required cannot be false for broad final design QA");
+  }
+  for (const field of DESIGN_VERDICT_FIELDS) {
+    const value = String(verdict[field] || "").trim().toLowerCase();
+    if (!value) incomplete.push(`design-quality.json designQuality.${field} is required`);
+    else if (value === "fail") blockers.push(`design-quality.json designQuality.${field} is fail`);
+    else if (value !== "pass") incomplete.push(`design-quality.json designQuality.${field} must be pass for final acceptance, not ${value}`);
+  }
+  await validateEvidenceReferences(outDir, verdict.reviewEvidence || verdict.review_evidence, "design-quality.json designQuality.reviewEvidence", incomplete);
+  if (!String(verdict.reviewerNotes || verdict.reviewer_notes || "").trim()) {
+    incomplete.push("design-quality.json designQuality.reviewerNotes is required");
+  }
+
+  const peerSkills = data.peerSkills || data.peer_skills || {};
+  for (const name of ["impeccable", "hallmark"]) {
+    const result = peerSkillProblems(name, peerSkills[name] || {});
+    incomplete.push(...result.incomplete);
+  }
+
+  const referenceResult = referenceDiscoveryProblems(data.referenceDiscovery || data.reference_discovery || {}, { ...gate, depth }, data.deepExploration || data.deep_exploration || {});
+  incomplete.push(...referenceResult.incomplete);
+  warnings.push(...referenceResult.warnings);
+
+  return { required: true, gateApplies: true, data, incomplete, blockers, warnings };
+}
+
 function warningCategory(message) {
   if (/console warning/i.test(message)) return "console";
   if (/visual consistency|typography|alignment|spacing|camouflaged|overlay|occlud|clipped overlay/i.test(message)) return "visual-consistency";
@@ -932,6 +1114,35 @@ function extractBriefField(text, field) {
   return text.match(new RegExp(`^\\s*-?\\s*${escaped}\\s*:\\s*(.+)$`, "im"))?.[1]?.trim() || "";
 }
 
+function designQualityGateFor(briefText = "", designQualityData = null) {
+  const rawGate = designQualityData?.design_quality_gate || designQualityData?.designQualityGate || null;
+  const heuristicApplies = requiresDesignQualityGate(briefText);
+  if (rawGate && typeof rawGate.applies === "boolean") {
+    return {
+      explicit: true,
+      applies: rawGate.applies,
+      reason: String(rawGate.reason || "").trim(),
+      depth: String(rawGate.depth || rawGate.design_exploration_depth || "").trim().toLowerCase(),
+      finalRequired: rawGate.final_required !== false && rawGate.finalRequired !== false,
+      peerSkills: designQualityData?.peerSkills || designQualityData?.peer_skills || {},
+      heuristicApplies,
+    };
+  }
+  return {
+    explicit: false,
+    applies: heuristicApplies,
+    reason: heuristicApplies ? "inferred from broad concept/revamp/new-build brief language" : "",
+    depth: "",
+    finalRequired: true,
+    peerSkills: designQualityData?.peerSkills || designQualityData?.peer_skills || {},
+    heuristicApplies,
+  };
+}
+
+function peerSkillAllowsFallback(peerSkill = {}) {
+  return peerSkill.status === "unavailable-fallback-used" && peerSkill.fallbackChecklistCompleted === true;
+}
+
 function hasImpeccableCommand(route, command) {
   return new RegExp(`\\b(?:impeccable\\s+)?${command}\\b`, "i").test(route);
 }
@@ -942,6 +1153,8 @@ function executionEvidenceProblem(text, field, label, options = {}) {
     return `design-brief.md needs filled ${label} execution evidence for concept/revamp/new-build work`;
   }
   const hasUserWaiver = /\b(user waiver|user waived|explicitly waived|waived by user)\b/i.test(evidence);
+  if (options.peerSkill?.status === "user-waived") return null;
+  if (peerSkillAllowsFallback(options.peerSkill)) return null;
   if (options.blockUnavailable && /\b(unavailable|not available|not installed|fallback|manual fallback|skipped|not run)\b/i.test(evidence) && !hasUserWaiver) {
     return `design-brief.md ${label} execution indicates the peer skill was not run; this needs an explicit user waiver for final acceptance`;
   }
@@ -972,7 +1185,7 @@ function requiredImpeccableCommands(text) {
   return [...required];
 }
 
-function briefProblems(text) {
+function briefProblems(text, gate = designQualityGateFor(text, null)) {
   const problems = [];
   if (!/(source truth|local truth|source[-\s]?of[-\s]?truth)/i.test(text)) {
     problems.push("design-brief.md is missing source truth or local truth");
@@ -983,7 +1196,7 @@ function briefProblems(text) {
   if (!/acceptance/i.test(text)) {
     problems.push("design-brief.md is missing acceptance gates or acceptance notes");
   }
-  if (requiresDesignQualityGate(text)) {
+  if (gate.applies) {
     if (!/(design quality bar|design thesis|surface quality bar)/i.test(text)) {
       problems.push("design-brief.md is missing a design quality bar for concept/revamp/new-build work");
     }
@@ -995,6 +1208,9 @@ function briefProblems(text) {
     }
     if (!/style posture\s*:/i.test(text) || /style posture\s*:\s*TODO\b/i.test(text)) {
       problems.push("design-brief.md needs a filled style posture for concept/revamp/new-build work");
+    }
+    if (!/(why this posture fits|posture fit|style posture reason)\s*:/i.test(text) || /(why this posture fits|posture fit|style posture reason)\s*:\s*TODO\b/i.test(text)) {
+      problems.push("design-brief.md needs a filled why this posture fits field for concept/revamp/new-build work");
     }
     if (!/surface quality bar\s*:/i.test(text) || /surface quality bar\s*:\s*TODO\b/i.test(text)) {
       problems.push("design-brief.md needs a filled surface quality bar for concept/revamp/new-build work");
@@ -1036,7 +1252,7 @@ function briefProblems(text) {
         problems.push(`design-brief.md Impeccable route is missing required command(s): ${missingCommands.join(", ")}`);
       }
     }
-    const impeccableExecutionProblem = executionEvidenceProblem(text, "Impeccable execution", "Impeccable", { blockUnavailable: true });
+    const impeccableExecutionProblem = executionEvidenceProblem(text, "Impeccable execution", "Impeccable", { blockUnavailable: true, peerSkill: gate.peerSkills?.impeccable });
     if (impeccableExecutionProblem) problems.push(impeccableExecutionProblem);
     if (!/reference discovery plan\s*:/i.test(text) || /reference discovery plan\s*:\s*TODO\b/i.test(text)) {
       problems.push("design-brief.md needs a filled reference discovery plan for concept/revamp/new-build work");
@@ -1047,13 +1263,17 @@ function briefProblems(text) {
     if (!/(hallmark|anti[-\s]?slop review)\s*:/i.test(text) || /(hallmark|anti[-\s]?slop review)\s*:\s*TODO\b/i.test(text)) {
       problems.push("design-brief.md needs a filled Hallmark or anti-slop review plan for concept/revamp/new-build work");
     }
-    const hallmarkExecutionProblem = executionEvidenceProblem(text, "Hallmark execution", "Hallmark");
+    const hallmarkExecutionProblem = executionEvidenceProblem(text, "Hallmark execution", "Hallmark", { peerSkill: gate.peerSkills?.hallmark });
     if (hallmarkExecutionProblem) problems.push(hallmarkExecutionProblem);
   }
   return problems;
 }
 
 function requiresDesignQualityGate(text) {
+  if (/\b(single component|one component|component-only|plain utility|deliberately plain|small visual bug|tiny css fix)\b/i.test(text)
+    && !/\b(broad|revamp|makeover|new build|greenfield|full redesign|whole page|whole screen)\b/i.test(text)) {
+    return false;
+  }
   return /concept\s*->\s*implement\s*->\s*QA/i.test(text)
     || /\b(greenfield|new build|new site|new app|new dashboard|create\s+\+\s|revamp|makeover|redesign)\b/i.test(text)
     || /design quality bar/i.test(text);
@@ -1110,6 +1330,7 @@ async function main() {
   const visualArtifact = await readJsonArtifact(path.join(outDir, "visual-consistency-audit.json"));
   const discoveryArtifact = await readJsonArtifact(path.join(outDir, "discovered-states.json"));
   const stateCoverageArtifact = await readJsonArtifact(path.join(outDir, "state-coverage.json"));
+  const designQualityArtifact = await readJsonArtifact(path.join(outDir, "design-quality.json"));
   const waiversArtifact = await readJsonArtifact(args.waivers || path.join(outDir, "waivers.json"));
   const rawWaivers = waiverArray(waiversArtifact.data);
   const waiverValidation = await validateWaivers(rawWaivers, { outDir, partial: args.partial });
@@ -1127,6 +1348,7 @@ async function main() {
   }
   const notesArtifact = await readTextArtifact(notesPath);
   const briefArtifact = await readTextArtifact(briefPath);
+  const designGate = designQualityGateFor(briefArtifact.text, designQualityArtifact.data);
 
   const blockers = [];
   const warnings = [];
@@ -1170,7 +1392,7 @@ async function main() {
   } else if (!briefArtifact.exists || !briefArtifact.text.trim()) {
     addIncomplete("design-brief.md is missing or empty; final design acceptance requires source truth, anti-goals, and acceptance notes", "design-brief");
   } else {
-    for (const problem of briefProblems(briefArtifact.text)) addIncomplete(problem, "design-brief");
+    for (const problem of briefProblems(briefArtifact.text, designGate)) addIncomplete(problem, "design-brief");
   }
   if (args.allowMixedEvidence) {
     warnings.push("--allow-mixed-evidence was supplied; this report cannot be final design acceptance");
@@ -1447,6 +1669,15 @@ async function main() {
     for (const issue of screenshotNotes.failed) addBlocker(issue, "screenshot-notes");
   }
 
+  const designQuality = await validateDesignQualityArtifact({
+    artifact: designQualityArtifact,
+    gate: designGate,
+    outDir,
+  });
+  for (const issue of designQuality.incomplete) addIncomplete(issue, "design-quality");
+  for (const issue of designQuality.blockers) addBlocker(issue, "design-quality");
+  for (const issue of designQuality.warnings) warnings.push(issue);
+
   const usedWaiverIndexes = new Set(appliedWaivers.map((entry) => entry.waiver.index));
   for (const waiver of waivers) {
     if (!usedWaiverIndexes.has(waiver.index)) {
@@ -1470,6 +1701,12 @@ async function main() {
         path: artifactPath(outDir, briefPath),
         exists: briefArtifact.exists,
         waived: Boolean(args.evidenceOnly || args.noBrief),
+      },
+      designQuality: {
+        path: artifactPath(outDir, designQualityArtifact.path),
+        exists: designQualityArtifact.exists,
+        required: designQuality.required,
+        gateApplies: designQuality.gateApplies,
       },
     },
     coverage,
@@ -1503,6 +1740,8 @@ async function main() {
     domAuditPath: artifactPath(outDir, domArtifact.path),
     visualConsistencyAuditPath: artifactPath(outDir, visualArtifact.path),
     stateCoveragePath: stateCoverageArtifact.exists ? artifactPath(outDir, stateCoverageArtifact.path) : null,
+    designQualityPath: designQualityArtifact.exists ? artifactPath(outDir, designQualityArtifact.path) : null,
+    designQuality,
     waiverValidation,
     appliedWaivers,
     evidenceCompleteness,

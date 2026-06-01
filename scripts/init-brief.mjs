@@ -89,6 +89,7 @@ TODO - named style, mood, density, motion level, and visual references. If the u
 - Design thesis: TODO - one or two sentences naming the product-specific point of view.
 - Primary workflow: TODO - what the first screen helps the user decide or do.
 - Style posture: TODO - named visual stance, not "clean and modern"; infer one if the user did not provide one.
+- Why this posture fits: TODO - one sentence tying the posture to audience, workflow, content, and usage context.
 - Surface quality bar: ${surfaceHint}
 - Design exploration depth: TODO - lean by default; use standard/deep only when the user asks for broader design-element exploration, multiple directions, or lawful source curation.
 - Visual signature: TODO - concrete typography, composition, color, spacing, imagery, motion, or interaction choices that make the interface distinct.
