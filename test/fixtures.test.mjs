@@ -1488,6 +1488,7 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   const readme = await fs.readFile(path.join(repoRoot, "README.md"), "utf8");
   const modes = await fs.readFile(path.join(repoRoot, "references/modes.md"), "utf8");
   const research = await fs.readFile(path.join(repoRoot, "references/research-and-inspiration.md"), "utf8");
+  const curatedLedger = await fs.readFile(path.join(repoRoot, "references/curated-research-ledger.yaml"), "utf8");
   const pkg = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
 
   for (const phrase of [
@@ -1509,11 +1510,50 @@ test("public docs expose ordinary prompts, new-build flow, research workflow, an
   assert.ok(research.includes("allowed_use"));
   assert.ok(research.includes("checked_at"));
   assert.ok(research.includes("license_source"));
+  assert.ok(research.includes("curated-research-ledger.yaml"));
+  assert.ok(readme.includes("curated-research-ledger.yaml"));
+  assert.ok(curatedLedger.includes("allowed_use"));
   assert.ok(readme.includes("Draft Vs Final QA"));
   assert.ok(readme.includes("npm run brief:new"));
+  assert.ok(readme.includes("## AI-Assisted Install"));
+  assert.ok(readme.includes("## Terminal Install"));
+  assert.ok(readme.indexOf("## Ask It Like This") < readme.indexOf("## AI-Assisted Install"));
+  assert.ok(readme.indexOf("## AI-Assisted Install") < readme.indexOf("## Terminal Install"));
   for (const scriptName of ["setup", "verify", "qa:web", "qa:web:draft", "qa:web:ci", "qa:web:final", "qa:native:ios", "qa:native:android", "brief:new", "research:ledger"]) {
     assert.ok(pkg.scripts[scriptName], `package script missing: ${scriptName}`);
   }
+});
+
+test("curated research ledger records source licenses, use boundaries, and watchlist exclusions", async () => {
+  const ledger = await fs.readFile(path.join(repoRoot, "references/curated-research-ledger.yaml"), "utf8");
+  const rows = ledger.split(/\n  - source: /).slice(1).map((row) => `source: ${row}`);
+  assert.ok(rows.length >= 20, "expected a broad curated source pass");
+  for (const row of rows) {
+    for (const field of [
+      "type",
+      "reputation_signal",
+      "checked_at",
+      "license",
+      "license_source",
+      "package_version_or_commit",
+      "maintenance_signal",
+      "maintenance_signal_checked_at",
+      "allowed_use",
+      "why_relevant",
+      "extract",
+      "do_not_copy",
+      "local_mapping",
+      "verification_gate",
+    ]) {
+      assert.ok(row.includes(`\n    ${field}:`), `curated row missing ${field}: ${row.slice(0, 120)}`);
+    }
+  }
+  assert.ok(rows.some((row) => row.includes('allowed_use: "dependency"')));
+  assert.ok(rows.some((row) => row.includes('allowed_use: "link only"')));
+  assert.ok(rows.some((row) => row.includes('allowed_use: "do not use"')));
+  assert.ok(rows.some((row) => row.includes('type: "GitHub skill"')));
+  assert.ok(rows.some((row) => row.includes("Mobbin") && row.includes('allowed_use: "do not use"')));
+  assert.equal(/\/Users\/|BGA|BGG|BoardGameGeek|Crokinole/i.test(ledger), false);
 });
 
 test("public package whitelist and docs avoid private generated artifacts", async () => {

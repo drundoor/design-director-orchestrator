@@ -74,6 +74,15 @@ Use primary sources for license checks: repository `LICENSE` files, package
 metadata, or official documentation. Re-check sources before an implementation
 lock if `checked_at` or `maintenance_signal_checked_at` is stale for the task.
 
+## Curated Starting Sources
+
+`references/curated-research-ledger.yaml` records a dedicated 2026-06-01
+curation pass across reputable GitHub component libraries, design systems,
+design skills, accessibility references, and inspiration sites. Treat it as a
+starting map only. Before a source influences implementation, copy the relevant
+row into the project ledger, re-check freshness, and keep any `link only` or
+`do not use` boundaries intact.
+
 Allowed-use defaults:
 
 - `link only`: inspiration, learning, or non-permissive/unclear license.
