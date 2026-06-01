@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, relativeArtifactPath, resolveTarget, slug, stableHash, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000 };
@@ -71,13 +71,18 @@ async function main() {
   const outDir = path.resolve(args.out);
   const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(screenshotDir, { recursive: true });
+  const startedAt = new Date().toISOString();
+  const runMeta = qaRunMetadata(config, { baseUrl, states, viewports }, startedAt);
 
   const { chromium } = await loadPlaywright();
 
   const browser = await launchBrowser(chromium);
   const results = {
     tool: "render-check",
-    generatedAt: new Date().toISOString(),
+    generatedAt: startedAt,
+    startedAt,
+    finishedAt: null,
+    ...runMeta,
     baseUrl,
     config: args.config || null,
     qaProfile: config.qaProfile || null,
@@ -163,6 +168,7 @@ async function main() {
     await browser.close();
   }
 
+  results.finishedAt = new Date().toISOString();
   await fs.writeFile(path.join(outDir, "render-results.json"), `${JSON.stringify(results, null, 2)}\n`);
   const failures = results.states.filter((state) => state.error || state.pageErrors.length || state.consoleErrors?.length);
   console.log(`render-check: wrote ${path.join(outDir, "render-results.json")} (${failures.length} failure candidates)`);

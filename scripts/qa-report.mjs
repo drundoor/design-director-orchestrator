@@ -40,6 +40,10 @@ function parseArgs(argv) {
       args.partial = true;
     } else if (arg === "--allow-partial-exit-zero") {
       args.allowPartialExitZero = true;
+    } else if (arg === "--allow-mixed-evidence") {
+      args.allowMixedEvidence = true;
+    } else if (arg === "--max-evidence-age-ms") {
+      args.maxEvidenceAgeMs = Number(argv[++i]);
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -48,7 +52,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--brief .design-director/design-brief.md] [--evidence-only|--no-brief] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero]
+  return `Usage: qa-report.mjs [--out .design-director] [--notes .design-director/screenshot-notes.md] [--waivers .design-director/waivers.json] [--brief .design-director/design-brief.md] [--evidence-only|--no-brief] [--init-notes] [--static] [--partial] [--allow-partial-exit-zero] [--allow-mixed-evidence] [--max-evidence-age-ms 1800000]
 
 Merges render-results.json, dom-audit.json, and visual-consistency-audit.json
 into design-qa.json and design-qa.md. Missing evidence is incomplete/failing by
@@ -113,10 +117,16 @@ function resolveEvidencePath(outDir, file) {
   return path.resolve(outDir, file);
 }
 
+function pathInsideDir(dir, file) {
+  const relative = path.relative(dir, file);
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
 function artifactPath(outDir, file) {
   if (!file) return file;
   const absolute = resolveEvidencePath(outDir, file);
   if (!absolute) return file;
+  if (!pathInsideDir(outDir, absolute)) return "[absolute-path-redacted]";
   return path.relative(outDir, absolute).replaceAll(path.sep, "/");
 }
 
@@ -179,6 +189,9 @@ function duplicateStateKeys(states = []) {
 async function inspectScreenshot(file, outDir) {
   const absolute = resolveEvidencePath(outDir, file);
   if (!absolute) return { path: file, exists: false, valid: false, reason: "path missing" };
+  if (!pathInsideDir(outDir, absolute)) {
+    return { path: artifactPath(outDir, file), exists: false, valid: false, reason: "evidence path is outside QA output directory" };
+  }
   try {
     const data = await fs.readFile(absolute);
     const isPng = data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a;
@@ -229,6 +242,25 @@ function imageDimensions(data, flags) {
         width: 1 + data.readUIntLE(24, 3),
         height: 1 + data.readUIntLE(27, 3),
       };
+    }
+    if (subtype === "VP8 " && data.length >= 30) {
+      const payloadOffset = 20;
+      if (data[payloadOffset + 3] === 0x9d && data[payloadOffset + 4] === 0x01 && data[payloadOffset + 5] === 0x2a) {
+        return {
+          width: data.readUInt16LE(payloadOffset + 6) & 0x3fff,
+          height: data.readUInt16LE(payloadOffset + 8) & 0x3fff,
+        };
+      }
+    }
+    if (subtype === "VP8L" && data.length >= 25) {
+      const payloadOffset = 20;
+      if (data[payloadOffset] === 0x2f) {
+        const bits = data.readUInt32LE(payloadOffset + 1);
+        return {
+          width: (bits & 0x3fff) + 1,
+          height: ((bits >> 14) & 0x3fff) + 1,
+        };
+      }
     }
   }
   return null;
@@ -287,11 +319,11 @@ function matchScope(waiver, context = {}) {
   return true;
 }
 
-function hasWaiver(waivers, check, context = {}) {
+function hasWaiver(waivers, check, context = {}, options = {}) {
   const target = normalizeCheck(check);
   return waivers.find((waiver) => {
     const waiverCheck = normalizeCheck(waiver.check || waiver.id || waiver.type);
-    const checkMatches = waiverCheck === target || (PREFIX_WAIVER_CHECKS.has(waiverCheck) && target.startsWith(`${waiverCheck}:`));
+    const checkMatches = waiverCheck === target || (options.partial && PREFIX_WAIVER_CHECKS.has(waiverCheck) && target.startsWith(`${waiverCheck}:`));
     return checkMatches && matchScope(waiver, context);
   });
 }
@@ -406,6 +438,28 @@ function issuesAreClear(value) {
   return /^(none|n\/a|not applicable|no issues?|no issue found|no visible issues?)\.?$/i.test(String(value || "").trim());
 }
 
+function noteMetadataProblems(screenshot, fields) {
+  const problems = [];
+  const viewport = fields.get("viewport");
+  const state = fields.get("state");
+  const url = fields.get("url");
+  const expectedViewport = screenshot.viewport ? `${screenshot.viewport.width}x${screenshot.viewport.height}` : "unknown";
+  const expectedState = screenshot.state || "unknown";
+  const expectedUrl = normalizeUrl(screenshot.url);
+  const aliasAllowed = /^(yes|true)$/i.test(fields.get("state alias") || fields.get("alias") || "");
+  const redirectAllowed = /^(yes|true)$/i.test(fields.get("redirect") || fields.get("url redirect") || "");
+  if (viewport && viewport !== expectedViewport) {
+    problems.push(`${screenshot.path}: note viewport ${viewport} does not match screenshot viewport ${expectedViewport}`);
+  }
+  if (state && state !== expectedState && !aliasAllowed) {
+    problems.push(`${screenshot.path}: note state ${state} does not match rendered state ${expectedState}`);
+  }
+  if (url && normalizeUrl(url) !== expectedUrl && !redirectAllowed) {
+    problems.push(`${screenshot.path}: note URL ${url} does not match screenshot URL ${screenshot.url}`);
+  }
+  return problems;
+}
+
 function screenshotDimensionProblems(screenshot, integrity) {
   const problems = [];
   if (!integrity.valid) return problems;
@@ -462,6 +516,7 @@ async function validateScreenshotNotes({ screenshots, notesText, notesExists, ou
     } else {
       const passFail = fields.get("pass/fail");
       const issuesFound = fields.get("issues found");
+      invalid.push(...noteMetadataProblems(screenshot, fields));
       if (/\b(fail|failed|blocked|issue)\b/i.test(passFail) || !issuesAreClear(issuesFound)) {
         failed.push(`${screenshot.path}: note records ${passFail}; issues found: ${issuesFound}`);
       }
@@ -654,18 +709,68 @@ function staticControlsFromDom(dom) {
   );
 }
 
+function artifactFreshness(artifacts, maxAgeMs) {
+  const present = artifacts.filter((artifact) => artifact.result.exists);
+  const hashes = new Set(present.map((artifact) => artifact.result.data?.configHash).filter(Boolean));
+  const baseUrls = new Set(present.map((artifact) => normalizeUrl(artifact.result.data?.baseUrl)).filter((url) => url !== "unknown-url"));
+  const configuredRunIds = new Set(
+    present
+      .filter((artifact) => artifact.result.data?.qaRunIdSource === "configured")
+      .map((artifact) => artifact.result.data?.qaRunId)
+      .filter(Boolean)
+  );
+  const appBuildIds = new Set(present.map((artifact) => artifact.result.data?.appBuildId).filter(Boolean));
+  const generatedRunIds = new Set(
+    present
+      .filter((artifact) => artifact.result.data?.qaRunIdSource !== "configured")
+      .map((artifact) => artifact.result.data?.qaRunId)
+      .filter(Boolean)
+  );
+  const times = present.flatMap((artifact) => [artifact.result.data?.startedAt, artifact.result.data?.finishedAt || artifact.result.data?.generatedAt])
+    .map((value) => Date.parse(value))
+    .filter((value) => Number.isFinite(value));
+  const earliest = times.length ? Math.min(...times) : null;
+  const latest = times.length ? Math.max(...times) : null;
+  return {
+    artifacts: present.map((artifact) => ({
+      name: artifact.name,
+      configHash: artifact.result.data?.configHash || null,
+      qaRunId: artifact.result.data?.qaRunId || null,
+      qaRunIdSource: artifact.result.data?.qaRunIdSource || null,
+      appBuildId: artifact.result.data?.appBuildId || null,
+      baseUrl: artifact.result.data?.baseUrl || null,
+      startedAt: artifact.result.data?.startedAt || null,
+      finishedAt: artifact.result.data?.finishedAt || null,
+      generatedAt: artifact.result.data?.generatedAt || null,
+    })),
+    hashes: [...hashes],
+    baseUrls: [...baseUrls],
+    configuredRunIds: [...configuredRunIds],
+    appBuildIds: [...appBuildIds],
+    generatedRunIds: [...generatedRunIds],
+    earliest: earliest ? new Date(earliest).toISOString() : null,
+    latest: latest ? new Date(latest).toISOString() : null,
+    spanMs: earliest && latest ? latest - earliest : null,
+    maxAgeMs,
+  };
+}
+
+function stateFinalUrl(state = {}) {
+  return normalizeUrl(state.finalUrl || state.url);
+}
+
 function sanitizeStringForOutput(value, outDir) {
   if (typeof value !== "string") return value;
   const normalizedOut = path.resolve(outDir);
-  if (value.includes(normalizedOut)) {
-    return value.split(normalizedOut).join(".");
-  }
-  if (path.isAbsolute(value)) {
-    const relative = path.relative(outDir, value);
+  let result = value.split(normalizedOut).join(".");
+  if (path.isAbsolute(result)) {
+    const relative = path.relative(outDir, result);
     if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return relative.replaceAll(path.sep, "/");
     return "[absolute-path-redacted]";
   }
-  return value;
+  result = result.replace(/(^|[\s("'=])\/(?:Users|home|var|tmp|private|opt|Volumes)\/[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
+  result = result.replace(/(^|[\s("'=])[A-Za-z]:\\(?:Users|Documents and Settings)\\[^\s"'`<>)]+/g, "$1[absolute-path-redacted]");
+  return result;
 }
 
 function sanitizeForOutput(value, outDir) {
@@ -687,6 +792,7 @@ async function main() {
     console.log(usage());
     return;
   }
+  const maxEvidenceAgeMs = Number.isFinite(args.maxEvidenceAgeMs) ? args.maxEvidenceAgeMs : 30 * 60 * 1000;
 
   const outDir = path.resolve(args.out);
   await fs.mkdir(outDir, { recursive: true });
@@ -730,7 +836,7 @@ async function main() {
   const appliedWaivers = [];
 
   const addBlocker = (message, check, context = {}) => {
-    const waiver = check ? hasWaiver(waivers, check, context) : null;
+    const waiver = check ? hasWaiver(waivers, check, context, { partial: args.partial }) : null;
     if (waiver) {
       appliedWaivers.push({ check, message, waiver, appliedTo: context });
       warnings.push(`waived blocker ${check}: ${message} (${waiver.reason || "no reason recorded"})`);
@@ -738,7 +844,7 @@ async function main() {
     else blockers.push(message);
   };
   const addIncomplete = (message, check, context = {}) => {
-    const waiver = check ? hasWaiver(waivers, check, context) : null;
+    const waiver = check ? hasWaiver(waivers, check, context, { partial: args.partial }) : null;
     if (waiver) {
       appliedWaivers.push({ check, message, waiver, appliedTo: context });
       warnings.push(`waived incomplete evidence ${check}: ${message} (${waiver.reason || "no reason recorded"})`);
@@ -755,6 +861,9 @@ async function main() {
   } else if (!briefArtifact.exists || !briefArtifact.text.trim()) {
     addIncomplete("design-brief.md is missing or empty; final design acceptance requires source truth, anti-goals, and acceptance notes", "design-brief");
   }
+  if (args.allowMixedEvidence) {
+    warnings.push("--allow-mixed-evidence was supplied; this report cannot be final design acceptance");
+  }
 
   for (const artifact of [
     ["render-results", renderArtifact],
@@ -763,6 +872,42 @@ async function main() {
   ]) {
     const [name, result] = artifact;
     if (!result.exists) addIncomplete(`${name}.json is missing`, name);
+  }
+
+  const freshness = artifactFreshness([
+    { name: "render-results", result: renderArtifact },
+    { name: "dom-audit", result: domArtifact },
+    { name: "visual-consistency-audit", result: visualArtifact },
+  ], maxEvidenceAgeMs);
+  for (const artifact of freshness.artifacts) {
+    if (!artifact.configHash) addIncomplete(`${artifact.name}.json is missing configHash; rerun current audit scripts`, "evidence-freshness");
+    if (!artifact.startedAt || !artifact.finishedAt) addIncomplete(`${artifact.name}.json is missing startedAt/finishedAt; rerun current audit scripts`, "evidence-freshness");
+  }
+  const mixedEvidenceAllowed = Boolean(args.partial || args.allowMixedEvidence);
+  if (freshness.hashes.length > 1) {
+    const message = `web audit artifacts were produced from different configHash values: ${freshness.hashes.join(", ")}`;
+    if (mixedEvidenceAllowed) warnings.push(message);
+    else addIncomplete(message, "evidence-freshness");
+  }
+  if (freshness.baseUrls.length > 1) {
+    const message = `web audit artifacts use different baseUrl values: ${freshness.baseUrls.join(", ")}`;
+    if (mixedEvidenceAllowed) warnings.push(message);
+    else addIncomplete(message, "evidence-freshness");
+  }
+  if (freshness.configuredRunIds.length > 1) {
+    addIncomplete(`configured qaRunId differs across web audit artifacts: ${freshness.configuredRunIds.join(", ")}`, "evidence-freshness");
+  } else if (freshness.generatedRunIds.length > 1) {
+    warnings.push("web audit artifacts used generated qaRunId values; configHash, baseUrl, and timestamps are enforcing freshness");
+  }
+  if (freshness.appBuildIds.length > 1) {
+    const message = `web audit artifacts use different appBuildId values: ${freshness.appBuildIds.join(", ")}`;
+    if (mixedEvidenceAllowed) warnings.push(message);
+    else addIncomplete(message, "evidence-freshness");
+  }
+  if (freshness.spanMs !== null && freshness.spanMs > maxEvidenceAgeMs) {
+    const message = `web audit artifacts were generated ${freshness.spanMs}ms apart, exceeding max evidence age ${maxEvidenceAgeMs}ms`;
+    if (mixedEvidenceAllowed) warnings.push(message);
+    else addIncomplete(message, "evidence-freshness");
   }
 
   if (renderArtifact.exists && !(render.states || []).length) addIncomplete("render-results.json has no state entries", "render-results:empty");
@@ -792,12 +937,47 @@ async function main() {
       coverage.missingVisualAudit.push({ key, state: state.state, viewport: state.viewport, url: state.finalUrl || state.url });
       addIncomplete(message, "coverage:visual", state);
     }
+    const urlChecks = [
+      ["DOM", domMatrix.get(key)],
+      ["visual", visualMatrix.get(key)],
+    ].filter(([, other]) => other);
+    for (const [label, other] of urlChecks) {
+      const renderUrl = stateFinalUrl(state);
+      const otherUrl = stateFinalUrl(other);
+      if (renderUrl !== otherUrl) {
+        const message = `${formatStateLabel(state)}: final URL mismatch for ${key}; render=${renderUrl}, ${label}=${otherUrl}`;
+        if (args.partial || render.allowFinalUrlMismatch || dom.allowFinalUrlMismatch || visual.allowFinalUrlMismatch) warnings.push(message);
+        else addIncomplete(message, "final-url", state);
+      }
+    }
   }
 
   if (!args.static && !discoveryArtifact.exists) {
     addIncomplete("state discovery output was not found; run discover-states.mjs or record a waiver", "state-discovery");
   } else if (!args.static && discoveryArtifact.exists && !((discoveryArtifact.data?.candidates?.length || 0) || (discoveryArtifact.data?.scans?.length || 0))) {
     addIncomplete("state discovery output exists but contains no candidates or scans", "state-discovery:empty");
+  }
+
+  if (!args.static && discoveryArtifact.exists) {
+    for (const scan of discoveryArtifact.data?.scans || []) {
+      const scanContext = { state: scan.state, url: scan.url, viewport: scan.viewport };
+      if (scan.ok === false || scan.error) {
+        addIncomplete(`state discovery scan failed for ${scan.state || "default"} ${viewportKey(scan.viewport)}: ${scan.error || "ok is false"}`, "state-discovery", scanContext);
+      }
+      if (scan.depth2Error) {
+        const hasHighConfidenceParent = (discoveryArtifact.data?.candidates || []).some((candidate) =>
+          candidate.kind === "overlay-trigger" &&
+          candidate.confidence === "high" &&
+          (candidate.mutationRisk || "safe") === "safe" &&
+          candidate.discoveredFrom?.state === scan.state &&
+          normalizeUrl(candidate.discoveredFrom?.url) === normalizeUrl(scan.url) &&
+          viewportKey(candidate.discoveredFrom?.viewport) === viewportKey(scan.viewport)
+        );
+        const message = `state discovery depth-2 scan failed for ${scan.state || "default"} ${viewportKey(scan.viewport)}: ${scan.depth2Error}`;
+        if (hasHighConfidenceParent) addIncomplete(message, "state-discovery", scanContext);
+        else warnings.push(message);
+      }
+    }
   }
 
   if (args.static) {
@@ -888,11 +1068,13 @@ async function main() {
   const evidenceCompleteness = {
     partial: Boolean(args.partial),
     static: Boolean(args.static),
+    mixedEvidenceAllowed: Boolean(args.allowMixedEvidence),
+    freshness,
     artifacts: {
       renderResults: { path: artifactPath(outDir, renderArtifact.path), exists: renderArtifact.exists, stateCount: render.states?.length || 0 },
       domAudit: { path: artifactPath(outDir, domArtifact.path), exists: domArtifact.exists, stateCount: dom.states?.length || 0 },
       visualConsistencyAudit: { path: artifactPath(outDir, visualArtifact.path), exists: visualArtifact.exists, stateCount: visual.states?.length || 0 },
-      stateDiscovery: { path: artifactPath(outDir, discoveryArtifact.path), exists: discoveryArtifact.exists, waived: Boolean(args.static || hasWaiver(waivers, "state-discovery")) },
+      stateDiscovery: { path: artifactPath(outDir, discoveryArtifact.path), exists: discoveryArtifact.exists, waived: Boolean(args.static || hasWaiver(waivers, "state-discovery", {}, { partial: args.partial })) },
       stateCoverage: { path: artifactPath(outDir, stateCoverageArtifact.path), exists: stateCoverageArtifact.exists, count: stateCoverageItems(stateCoverageArtifact.data).length },
       waivers: { path: artifactPath(outDir, waiversArtifact.path), exists: waiversArtifact.exists, count: rawWaivers.length, validCount: waivers.length, invalidCount: waiverValidation.invalid.length },
       designBrief: {
@@ -910,8 +1092,10 @@ async function main() {
   };
 
   const status = blockers.length ? "fail" : incomplete.length ? "incomplete" : "pass";
+  const qaMode = args.partial ? "partial" : args.static ? "static" : (args.evidenceOnly || args.noBrief || args.allowMixedEvidence) ? "evidence-only" : "final";
   const qa = {
     generatedAt: new Date().toISOString(),
+    qaMode,
     status,
     blockers,
     incomplete,
@@ -926,7 +1110,7 @@ async function main() {
     waiverValidation,
     appliedWaivers,
     evidenceCompleteness,
-    acceptanceReady: status === "pass" && !args.partial,
+    acceptanceReady: status === "pass" && qaMode === "final",
   };
 
   const md = `# Design QA
@@ -936,6 +1120,7 @@ Generated: ${qa.generatedAt}
 ## Status
 
 - Status: ${qa.status}
+- QA mode: ${qa.qaMode}
 - Blockers: ${blockers.length}
 - Incomplete evidence: ${incomplete.length}
 - Warnings: ${warnings.length}

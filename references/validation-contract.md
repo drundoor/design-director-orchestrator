@@ -84,7 +84,7 @@ Use fewer only when the surface clearly does not need them, and record why.
 
 A design pass is accepted only when:
 
-1. `.design-director/design-brief.md` exists or was updated, unless this is explicitly an `--evidence-only` validation run.
+1. `.design-director/design-brief.md` exists or was updated. An `--evidence-only` run can validate artifacts, but it is not final acceptance.
 2. The brief names source of truth, surface, owners, anti-goals, and acceptance gates.
 3. Every external reference has a role, tier, extract, `do_not_copy`, and verification gate.
 4. Implementation changes map back to the brief.
@@ -93,5 +93,6 @@ A design pass is accepted only when:
 7. Screenshots were inspected, not merely generated.
 8. `.design-director/design-qa.json` records automated evidence from render, DOM, and visual-consistency audits.
 9. `.design-director/design-qa.md` records pass/fail, residual risk, and waivers.
-10. No blocker remains unwaived.
-11. Any waiver includes evidence and reason, and no valid waiver is stale or unused.
+10. `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`.
+11. No blocker remains unwaived.
+12. Any waiver includes evidence and reason, and no valid waiver is stale or unused.

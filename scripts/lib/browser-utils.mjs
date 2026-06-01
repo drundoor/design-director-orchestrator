@@ -128,3 +128,31 @@ export function relativeArtifactPath(baseDir, file) {
 export function stableHash(value, length = 8) {
   return createHash("sha256").update(String(value || "")).digest("hex").slice(0, length);
 }
+
+export function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  const entries = Object.entries(value)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
+}
+
+export function configHashFor(config = {}, effective = {}) {
+  return stableHash(stableStringify({ config, effective }), 16);
+}
+
+export function qaRunMetadata(config = {}, effective = {}, startedAt = new Date().toISOString()) {
+  const configHash = configHashFor(config, effective);
+  const configuredRunId = process.env.DESIGN_DIRECTOR_QA_RUN_ID || config.qaRunId;
+  const appBuildId = process.env.DESIGN_DIRECTOR_APP_BUILD_ID || config.appBuildId || null;
+  return {
+    startedAt,
+    configHash,
+    qaRunId: configuredRunId || `generated-${stableHash(`${configHash}:${process.pid}:${startedAt}:${Math.random()}`, 16)}`,
+    qaRunIdSource: configuredRunId ? "configured" : "generated",
+    appBuildId,
+    evidenceMode: config.evidenceMode || null,
+    allowFinalUrlMismatch: Boolean(config.allowFinalUrlMismatch),
+  };
+}

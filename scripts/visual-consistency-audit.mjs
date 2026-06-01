@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = {
@@ -88,12 +88,17 @@ async function main() {
   const outDir = path.resolve(args.out);
   const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(outDir, { recursive: true });
+  const startedAt = new Date().toISOString();
+  const runMeta = qaRunMetadata(config, { baseUrl, states, viewports }, startedAt);
 
   const { chromium } = await loadPlaywright();
   const browser = await launchBrowser(chromium);
   const results = {
     tool: "visual-consistency-audit",
-    generatedAt: new Date().toISOString(),
+    generatedAt: startedAt,
+    startedAt,
+    finishedAt: null,
+    ...runMeta,
     baseUrl,
     config: args.config || null,
     thresholds: {
@@ -651,6 +656,7 @@ async function main() {
     await browser.close();
   }
 
+  results.finishedAt = new Date().toISOString();
   await fs.writeFile(path.join(outDir, "visual-consistency-audit.json"), `${JSON.stringify(results, null, 2)}\n`);
   const blockerCount = results.states.reduce((sum, state) => sum + (state.audit?.blockers?.length || 0) + (state.error ? 1 : 0), 0);
   const warningCount = results.states.reduce((sum, state) => sum + (state.audit?.warnings?.length || 0), 0);

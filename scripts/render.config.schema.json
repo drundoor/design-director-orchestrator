@@ -15,6 +15,14 @@
     "qaProfile": {
       "enum": ["audit", "repair", "revamp", "implementation", "final-qa", "static"]
     },
+    "qaRunId": { "type": "string", "minLength": 1 },
+    "appBuildId": { "type": "string", "minLength": 1 },
+    "allowFinalUrlMismatch": { "type": "boolean" },
+    "allowMixedEvidence": { "type": "boolean" },
+    "requireBrief": { "type": "boolean" },
+    "evidenceMode": {
+      "enum": ["final", "evidence-only", "partial", "static"]
+    },
     "waitForSelector": { "type": "string", "minLength": 1 },
     "waitMs": { "type": "number", "minimum": 0 },
     "fullPage": { "type": "boolean" },

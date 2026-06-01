@@ -101,7 +101,7 @@ Install https://github.com/drundoor/design-director-orchestrator as a local Code
 For Claude or another coding agent:
 
 ```text
-Clone https://github.com/drundoor/design-director-orchestrator. Run `npm install`, `npx playwright install chromium`, and `npm test`. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them.
+Clone https://github.com/drundoor/design-director-orchestrator. Run `npm install`, `npx playwright install chromium`, `npm test`, `npm run smoke:web`, `npm run smoke:native`, and `npm run smoke:native:fail`. If your environment supports Codex-style skills, install it as a skill folder named design-director. Otherwise, use SKILL.md as the entrypoint instructions and load files from references/ only when the task needs them.
 ```
 
 Generic manual install:
@@ -172,7 +172,16 @@ node ~/.codex/skills/design-director/scripts/qa-report.mjs \
   --out .design-director
 ```
 
-Final web acceptance means `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`, with `.design-director/design-brief.md` present. Use `--evidence-only` only when the task is explicitly validating evidence rather than accepting design work.
+Final web acceptance means `.design-director/design-qa.json` has `status: "pass"` and `acceptanceReady: true`, with `.design-director/design-brief.md` present. Evidence-only reports are not final acceptance. Use `--evidence-only` only when the task is explicitly validating evidence rather than accepting design work.
+
+Final acceptance checklist:
+
+- `design-brief.md` exists.
+- `design-qa.json` status is `pass`.
+- `acceptanceReady` is `true`.
+- Screenshot notes were inspected.
+- State discovery and coverage are resolved.
+- No unwaived blockers or incomplete evidence remain.
 
 For non-interactive static pages only, add `--static` to waive state discovery. Static mode still fails if the DOM audit finds visible interactive controls. For draft reports that intentionally do not yet have all evidence, add `--partial`; partial reports are not acceptance evidence and exit nonzero unless `--allow-partial-exit-zero` is explicitly supplied.
 
@@ -199,7 +208,7 @@ node ~/.codex/skills/design-director/scripts/native-qa-report.mjs \
   --out .design-director
 ```
 
-Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Profile labels in a report are descriptive only; coverage is inferred from fields such as `appearance`, `contentSize`, `keyboard`, `theme`, `fontScale`, and `ime`. Use `notApplicableProfiles` with reason plus hierarchy/tree evidence only when a required profile truly does not apply, such as a read-only screen with no editable field. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
+Native final QA defaults to the `standard` profile. Standard iOS requires default-light, dark, large-text, and keyboard-focused coverage. Standard Android requires default-light, dark, font-scale-large, and IME-focused coverage. Profile labels in a report are descriptive only; coverage is inferred from fields such as `appearance`, `contentSize`, `keyboard`, `focusedEditable`, `theme`, `fontScale`, and `ime`. Use `notApplicableProfiles` with reason plus hierarchy/tree evidence only when a required profile truly does not apply, such as a read-only screen with no editable field. Use `--profile minimal` only for quick audits, and `--profile deep` when orientation/display-size variants are in scope.
 
 Minimum successful native QA artifact tree:
 

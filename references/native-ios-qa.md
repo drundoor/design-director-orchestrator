@@ -44,6 +44,7 @@ acceptance evidence.
 Required profile coverage is inferred from concrete metadata, not from
 `profile` or `profiles` labels alone. For standard QA, light, dark, large text,
 and keyboard-focused states must be backed by matching fields such as
-`appearance`, `contentSize`, and `keyboard`. Use `notApplicableProfiles` only
+`appearance`, `contentSize`, `keyboard`, and `focusedEditable`. Use
+`notApplicableProfiles` only
 with a reason and hierarchy evidence that proves a profile is irrelevant, such
 as a read-only screen with no editable fields.

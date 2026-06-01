@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, preparePage, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, preparePage, qaRunMetadata, readJsonIfExists, resolveTarget, stateIdFor, stateNameFor } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000, minTextPx: 12, minTargetPx: 44 };
@@ -55,14 +55,20 @@ async function main() {
   const outDir = path.resolve(args.out);
   const screenshotDir = path.join(outDir, "screenshots");
   await fs.mkdir(outDir, { recursive: true });
+  const startedAt = new Date().toISOString();
+  const runMeta = qaRunMetadata(config, { baseUrl, states, viewports }, startedAt);
 
   const { chromium } = await loadPlaywright();
 
   const browser = await launchBrowser(chromium);
   const results = {
     tool: "dom-audit",
-    generatedAt: new Date().toISOString(),
+    generatedAt: startedAt,
+    startedAt,
+    finishedAt: null,
+    ...runMeta,
     baseUrl,
+    config: args.config || null,
     states: [],
   };
 
@@ -221,6 +227,7 @@ async function main() {
     await browser.close();
   }
 
+  results.finishedAt = new Date().toISOString();
   await fs.writeFile(path.join(outDir, "dom-audit.json"), `${JSON.stringify(results, null, 2)}\n`);
   const overflowCount = results.states.filter((state) => state.audit?.overflow?.hasHorizontalOverflow).length;
   console.log(`dom-audit: wrote ${path.join(outDir, "dom-audit.json")} (${overflowCount} overflow candidates)`);

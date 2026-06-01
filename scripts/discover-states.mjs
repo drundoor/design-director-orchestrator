@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runActions } from "./lib/actions.mjs";
-import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, slug, writeJson } from "./lib/browser-utils.mjs";
+import { DEFAULT_VIEWPORTS, launchBrowser, loadPlaywright, parseViewports, preparePage, readJsonIfExists, resolveTarget, slug, stateIdFor, writeJson } from "./lib/browser-utils.mjs";
 
 function parseArgs(argv) {
   const args = { out: ".design-director", timeout: 15000, maxCandidates: 80, viewportMode: "smallest-largest", routesMode: "all", depth: 1 };
@@ -240,8 +240,10 @@ async function main() {
     viewportMode: args.viewportMode,
     routesMode: args.routesMode,
     depth: args.depth,
-    targets: targetStates.map((state) => ({
+    targets: targetStates.map((state, stateIndex) => ({
       state: state.name || "default",
+      stateId: stateIdFor(state, stateIndex),
+      stateIndex,
       url: resolveTarget(baseUrl, state),
     })),
     viewports,
@@ -251,12 +253,14 @@ async function main() {
   };
 
   try {
-    for (const targetState of targetStates) {
+    for (const [targetStateIndex, targetState] of targetStates.entries()) {
       for (const viewport of viewports) {
         const page = await browser.newPage({ viewport });
         const targetUrl = resolveTarget(baseUrl, targetState);
         const scan = {
           state: targetState.name || "default",
+          stateId: stateIdFor(targetState, targetStateIndex),
+          stateIndex: targetStateIndex,
           url: targetUrl,
           viewport,
           candidates: [],
@@ -441,6 +445,8 @@ async function main() {
             ...candidate,
             discoveredFrom: {
               state: scan.state,
+              stateId: scan.stateId,
+              stateIndex: scan.stateIndex,
               url: scan.url,
               viewport: scan.viewport,
             },
@@ -460,6 +466,8 @@ async function main() {
                   parent: { kind: parent.kind, selector: parent.selector, label: parent.label },
                   discoveredFrom: {
                     state: scan.state,
+                    stateId: scan.stateId,
+                    stateIndex: scan.stateIndex,
                     url: scan.url,
                     viewport: scan.viewport,
                     depth: 2,
@@ -495,6 +503,8 @@ async function main() {
           confidence: candidate.confidence,
           labelConfidence: candidate.labelConfidence,
           state: candidate.discoveredFrom?.state,
+          stateId: candidate.discoveredFrom?.stateId,
+          stateIndex: candidate.discoveredFrom?.stateIndex,
           url: candidate.discoveredFrom?.url,
           viewport: candidate.discoveredFrom?.viewport,
           depth: candidate.discoveredFrom?.depth || 1,

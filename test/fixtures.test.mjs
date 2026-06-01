@@ -23,7 +23,43 @@ function pngBytes(width = 375, height = 700) {
   return data;
 }
 
+function webpVp8Bytes(width = 375, height = 700) {
+  const payloadSize = 10;
+  const data = Buffer.alloc(20 + payloadSize);
+  data.write("RIFF", 0, "ascii");
+  data.writeUInt32LE(4 + 8 + payloadSize, 4);
+  data.write("WEBP", 8, "ascii");
+  data.write("VP8 ", 12, "ascii");
+  data.writeUInt32LE(payloadSize, 16);
+  const payloadOffset = 20;
+  data[payloadOffset] = 0x00;
+  data[payloadOffset + 1] = 0x00;
+  data[payloadOffset + 2] = 0x00;
+  data[payloadOffset + 3] = 0x9d;
+  data[payloadOffset + 4] = 0x01;
+  data[payloadOffset + 5] = 0x2a;
+  data.writeUInt16LE(width & 0x3fff, payloadOffset + 6);
+  data.writeUInt16LE(height & 0x3fff, payloadOffset + 8);
+  return data;
+}
+
 const pagePng = pngBytes(375, 700);
+const webMetaTimestamp = "2026-01-01T00:00:00.000Z";
+
+function webMeta(tool, overrides = {}) {
+  return {
+    tool,
+    generatedAt: webMetaTimestamp,
+    startedAt: webMetaTimestamp,
+    finishedAt: "2026-01-01T00:00:01.000Z",
+    configHash: "test-config-hash",
+    qaRunId: "test-run",
+    qaRunIdSource: "configured",
+    appBuildId: "test-build",
+    baseUrl: "http://example.invalid",
+    ...overrides,
+  };
+}
 
 async function runScript(args, options = {}) {
   return execFileAsync(node, args, {
@@ -72,12 +108,13 @@ async function createQaArtifacts(out, overrides = {}) {
     ...(overrides.state || {}),
   };
   await writeJson(path.join(out, "render-results.json"), {
+    ...webMeta("render-check"),
     screenshots: [screenshot],
     states: [state],
     ...(overrides.render || {}),
   });
-  await writeJson(path.join(out, "dom-audit.json"), overrides.dom || { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] });
-  await writeJson(path.join(out, "visual-consistency-audit.json"), overrides.visual || { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] });
+  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), ...(overrides.dom || { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] }) });
+  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), ...(overrides.visual || { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] }) });
   if (!overrides.skipDiscovery) {
     await writeJson(path.join(out, "discovered-states.json"), overrides.discovery || { candidates: [{ kind: "select" }], scans: [{ ok: true }] });
   }
@@ -281,6 +318,7 @@ test("qa-report initializes notes but keeps template as blocker", async () => {
   await fs.mkdir(path.join(out, "screenshots"), { recursive: true });
   await fs.writeFile(path.join(out, "screenshots/default-375x700.png"), pagePng);
   await fs.writeFile(path.join(out, "render-results.json"), JSON.stringify({
+    ...webMeta("render-check"),
     screenshots: [path.join(out, "screenshots/default-375x700.png")],
     states: [
       {
@@ -296,8 +334,8 @@ test("qa-report initializes notes but keeps template as blocker", async () => {
       }
     ]
   }, null, 2));
-  await writeJson(path.join(out, "dom-audit.json"), { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] });
-  await writeJson(path.join(out, "visual-consistency-audit.json"), { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] });
+  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] });
+  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] });
 
   await assert.rejects(
     runScript(["scripts/qa-report.mjs", "--out", out, "--init-notes"]),
@@ -365,14 +403,15 @@ test("qa-report requires DOM and visual audit coverage for every rendered state"
   await fs.writeFile(first, pagePng);
   await fs.writeFile(second, pagePng);
   await writeJson(path.join(out, "render-results.json"), {
+    ...webMeta("render-check"),
     screenshots: [first, second],
     states: [
       { state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, screenshot: first, pageErrors: [], consoleErrors: [], consoleWarnings: [] },
       { state: "details", url: "http://example.invalid/details", finalUrl: "http://example.invalid/details", viewport: { width: 375, height: 700 }, screenshot: second, pageErrors: [], consoleErrors: [], consoleWarnings: [] }
     ]
   });
-  await writeJson(path.join(out, "dom-audit.json"), { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] });
-  await writeJson(path.join(out, "visual-consistency-audit.json"), { states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] });
+  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }] });
+  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), states: [{ state: "default", url: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }] });
   await writeJson(path.join(out, "discovered-states.json"), { candidates: [], scans: [{ ok: true }] });
   await writeInspectedNotes(path.join(out, "screenshot-notes.md"), [{ path: first }, { path: second, state: "details", url: "http://example.invalid/details" }]);
 
@@ -402,14 +441,15 @@ test("qa-report rejects duplicate state matrix keys", async () => {
     consoleWarnings: []
   });
   await writeJson(path.join(out, "render-results.json"), {
+    ...webMeta("render-check"),
     screenshots: [first, second],
     states: [
       duplicateState(first, "http://example.invalid/one"),
       duplicateState(second, "http://example.invalid/two")
     ]
   });
-  await writeJson(path.join(out, "dom-audit.json"), { states: [duplicateState(first, "http://example.invalid/one")] });
-  await writeJson(path.join(out, "visual-consistency-audit.json"), { states: [duplicateState(first, "http://example.invalid/one")] });
+  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), states: [duplicateState(first, "http://example.invalid/one")] });
+  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), states: [duplicateState(first, "http://example.invalid/one")] });
   await writeJson(path.join(out, "discovered-states.json"), { candidates: [], scans: [{ ok: true }] });
   await fs.writeFile(path.join(out, "design-brief.md"), "Source truth: fixture.\nAnti-goals: none.\nAcceptance: duplicate keys fail.\n");
   await writeInspectedNotes(path.join(out, "screenshot-notes.md"), [{ path: first }, { path: second }]);
@@ -503,6 +543,8 @@ test("qa-report enforces design brief unless evidence-only mode is explicit", as
   await runScript(["scripts/qa-report.mjs", "--out", out, "--evidence-only"]);
   qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
   assert.equal(qa.status, "pass");
+  assert.equal(qa.qaMode, "evidence-only");
+  assert.equal(qa.acceptanceReady, false);
   assert.equal(qa.evidenceCompleteness.artifacts.designBrief.waived, true);
 });
 
@@ -513,6 +555,144 @@ test("qa-report persisted JSON does not leak absolute output paths", async () =>
   const raw = await fs.readFile(path.join(out, "design-qa.json"), "utf8");
   assert.equal(raw.includes(out), false);
   assert.equal(raw.includes("absolutePath"), false);
+});
+
+test("qa-report rejects mixed config hashes and base URLs", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-mixed-evidence-"));
+  await createQaArtifacts(out, {
+    dom: {
+      ...webMeta("dom-audit", { configHash: "other-config-hash", baseUrl: "http://other.example.invalid" }),
+      states: [{ state: "default", url: "http://other.example.invalid", finalUrl: "http://other.example.invalid", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }]
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("different configHash values")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("different baseUrl values")));
+});
+
+test("qa-report rejects stale evidence generated outside the freshness window", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-stale-evidence-"));
+  await createQaArtifacts(out, {
+    visual: {
+      ...webMeta("visual-consistency-audit", {
+        startedAt: "2026-01-01T01:00:00.000Z",
+        finishedAt: "2026-01-01T01:00:01.000Z"
+      }),
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, audit: { blockers: [], warnings: [] } }]
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("exceeding max evidence age")));
+});
+
+test("qa-report rejects final URL drift across web artifacts", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-final-url-"));
+  await createQaArtifacts(out, {
+    dom: {
+      ...webMeta("dom-audit"),
+      states: [{ state: "default", url: "http://example.invalid", finalUrl: "http://example.invalid/details", viewport: { width: 375, height: 700 }, audit: { interactiveControls: [] } }]
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("final URL mismatch")));
+});
+
+test("qa-report cross-checks screenshot note viewport, state, and URL", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-note-cross-check-"));
+  const { screenshot } = await createQaArtifacts(out);
+  await fs.writeFile(path.join(out, "screenshot-notes.md"), `# Screenshot Inspection Notes
+
+## ${screenshot}
+
+- Viewport: 1440x1000
+- State: wrong-state
+- URL: http://example.invalid/wrong
+- Observation: Checked rendered state.
+- Pass/fail: Pass
+- Issues found: None
+- Waiver/evidence: N/A
+`);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("note viewport 1440x1000")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("note state wrong-state")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("note URL http://example.invalid/wrong")));
+});
+
+test("qa-report redacts embedded and outside evidence paths", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-redact-"));
+  const outside = path.join(os.tmpdir(), "outside-dd-shot.png");
+  await fs.writeFile(outside, pagePng);
+  await createQaArtifacts(out, {
+    screenshot: outside,
+    state: {
+      error: "Failure wrote details to /Users/alice/project/private.log and C:\\Users\\Alice\\project\\private.log"
+    }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const raw = await fs.readFile(path.join(out, "design-qa.json"), "utf8");
+  assert.equal(raw.includes("alice"), false);
+  assert.equal(raw.includes("Alice"), false);
+  assert.equal(raw.includes("../"), false);
+  assert.ok(raw.includes("[absolute-path-redacted]"));
+});
+
+test("qa-report does not let broad coverage waivers hide final coverage gaps", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-broad-coverage-"));
+  const first = path.join(out, "screenshots/default-375x700.png");
+  await fs.mkdir(path.dirname(first), { recursive: true });
+  await fs.writeFile(first, pagePng);
+  await writeJson(path.join(out, "render-results.json"), {
+    ...webMeta("render-check"),
+    screenshots: [first],
+    states: [{ state: "default", stateId: "default", url: "http://example.invalid", finalUrl: "http://example.invalid", viewport: { width: 375, height: 700 }, screenshot: first, pageErrors: [], consoleErrors: [], consoleWarnings: [] }]
+  });
+  await writeJson(path.join(out, "dom-audit.json"), { ...webMeta("dom-audit"), states: [] });
+  await writeJson(path.join(out, "visual-consistency-audit.json"), { ...webMeta("visual-consistency-audit"), states: [] });
+  await writeJson(path.join(out, "discovered-states.json"), { candidates: [], scans: [{ ok: true }] });
+  await fs.writeFile(path.join(out, "design-brief.md"), "Source truth: fixture.\nAnti-goals: none.\nAcceptance: broad waiver fails.\n");
+  await writeInspectedNotes(path.join(out, "screenshot-notes.md"), [{ path: first }]);
+  await writeJson(path.join(out, "waivers.json"), [{
+    check: "coverage",
+    reason: "Broad coverage waiver should not apply to final QA.",
+    evidence: "screenshots/default-375x700.png",
+    owner: "qa",
+    expires: "2999-01-01"
+  }]);
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("DOM audit missing")));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("visual audit missing")));
+});
+
+test("qa-report rejects failed discovery scans", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-discovery-fail-"));
+  await createQaArtifacts(out, {
+    discovery: { candidates: [], scans: [{ state: "default", viewport: { width: 375, height: 700 }, ok: false, error: "navigation timeout" }] }
+  });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("state discovery scan failed")));
+});
+
+test("qa-report reads VP8 WebP dimensions", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-webp-"));
+  await createQaArtifacts(out, { screenshotBytes: webpVp8Bytes(375, 700), screenshot: path.join(out, "screenshots/default-375x700.webp") });
+  await runScript(["scripts/qa-report.mjs", "--out", out]);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.evidenceCompleteness.screenshots.notes.integrity[0].width, 375);
+});
+
+test("qa-report rejects tiny VP8 WebP screenshots", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-qa-tiny-webp-"));
+  await createQaArtifacts(out, { screenshotBytes: webpVp8Bytes(1, 1), screenshot: path.join(out, "screenshots/default-375x700.webp") });
+  await assert.rejects(runScript(["scripts/qa-report.mjs", "--out", out]), /qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("page screenshot width 1px")));
 });
 
 test("qa-report enforces important medium-confidence candidates for final QA", async () => {
@@ -739,6 +919,109 @@ test("native-qa-report does not count self-declared profiles without supporting 
   assert.equal(qa.status, "incomplete");
   assert.ok(qa.incomplete.some((issue) => issue.includes("required profile not covered: dark")));
   assert.ok(qa.warnings.some((warning) => warning.includes("declared profile dark is not supported")));
+});
+
+test("native-qa-report does not infer iOS keyboard coverage from state names", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-keyboard-name-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    matrix: [
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "form-focused", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("required profile not covered: keyboard-focused")));
+});
+
+test("native-qa-report does not infer Android IME coverage from state names", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-ime-name-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "tree.xml"), "<hierarchy />");
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-android-qa.json"), {
+    platform: "native-android",
+    target: { module: ":app", variant: "debug", device: "Pixel 8", apiLevel: 35 },
+    tooling: { commandsOrToolCalls: ["adb exec-out screencap -p"] },
+    matrix: [
+      { state: "home-light", theme: "light", fontScale: 1, displaySize: "default", screenshot: "home.png", uiTree: "tree.xml", result: "pass" },
+      { state: "home-dark", theme: "dark", fontScale: 1, displaySize: "default", screenshot: "home.png", uiTree: "tree.xml", result: "pass" },
+      { state: "home-large", theme: "light", fontScale: 1.3, displaySize: "default", screenshot: "home.png", uiTree: "tree.xml", result: "pass" },
+      { state: "ime-focused", theme: "light", fontScale: 1, displaySize: "default", screenshot: "home.png", uiTree: "tree.xml", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-android-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("required profile not covered: ime-focused")));
+});
+
+test("native-qa-report rejects string-only not-applicable profile records", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-not-applicable-string-"));
+  await fs.writeFile(path.join(out, "home.png"), pagePng);
+  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    matrix: [
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home.png", uiHierarchy: "hierarchy.json", result: "pass" }
+    ],
+    notApplicableProfiles: {
+      "keyboard-focused": "Read-only screen has no editable field."
+    },
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log"
+  });
+
+  await assert.rejects(runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out]), /native-qa-report/);
+  const qa = JSON.parse(await fs.readFile(path.join(out, "native-design-qa.json"), "utf8"));
+  assert.ok(qa.incomplete.some((issue) => issue.includes("must include reason and evidence object")));
+});
+
+test("native-qa-report sanitizes report-provided paths and accepts VP8 WebP screenshots", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "dd-native-webp-redact-"));
+  await fs.writeFile(path.join(out, "home.webp"), webpVp8Bytes(375, 700));
+  await fs.writeFile(path.join(out, "hierarchy.json"), JSON.stringify({ windows: [] }));
+  await fs.writeFile(path.join(out, "runtime.log"), "No runtime errors captured.\n");
+  await writeJson(path.join(out, "native-ios-qa.json"), {
+    platform: "native-ios",
+    target: { workspace: "App.xcworkspace", scheme: "App", simulator: "iPhone 16" },
+    tooling: { commandsOrToolCalls: ["capture screenshot"] },
+    matrix: [
+      { state: "home-light", appearance: "light", contentSize: "default", orientation: "portrait", screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-dark", appearance: "dark", contentSize: "default", orientation: "portrait", screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-large", appearance: "light", contentSize: "accessibilityLarge", orientation: "portrait", screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" },
+      { state: "home-keyboard", appearance: "light", contentSize: "default", orientation: "portrait", keyboard: true, screenshot: "home.webp", uiHierarchy: "hierarchy.json", result: "pass" }
+    ],
+    checks: { logsReviewed: "checked" },
+    logs: "runtime.log",
+    warnings: ["see /Users/alice/project/private.log"]
+  });
+
+  await runScript(["scripts/native-qa-report.mjs", "--report", path.join(out, "native-ios-qa.json"), "--out", out]);
+  const raw = await fs.readFile(path.join(out, "native-design-qa.json"), "utf8");
+  const qa = JSON.parse(raw);
+  assert.equal(qa.status, "pass");
+  assert.equal(qa.evidence.screenshots[0].width, 375);
+  assert.equal(raw.includes("alice"), false);
+  assert.ok(raw.includes("[absolute-path-redacted]"));
 });
 
 test("native-qa-report accepts not-applicable keyboard profile only with hierarchy evidence", async () => {
